@@ -459,6 +459,349 @@ new m-coord:  0  1  2  3  8  9 10 11 16 17 18 19 24 25 26 27  4  5  6  7 12 13 1
 
 如需了解这些 `TiledMMA` 如何用于 partition data tensors，请参见 [`0x_gemm_tutorial.md`](./0x_gemm_tutorial.md)。
 
+## 补充理解：几个容易混淆的点
+
+这一节不是原文内容，而是对上面 MMA Atom / TiledMMA 机制的补充说明。
+
+### 1. `CLayout` 描述的不是 C 矩阵本身
+
+`CLayout` 描述的是：
+
+```text
+(logical_thread_id, logical_value_id) -> C tile 中的 (m,n)
+```
+
+也就是“某个 MMA 指令内部，哪个线程的哪个 accumulator register value 对应 C tile 的哪个元素”。它不是普通矩阵 C 的 row-major / column-major storage layout。
+
+以 Volta `SM70_8x8x4_F32F16F16F32_NT` 为例，文档中出现多个 `CLayout`，它们不是多个最终版本，而是同一个最终 `CLayout` 的逐步构造：
+
+```cpp
+// 1. 只说明输入空间是 8 threads x 8 values 描述的是总共8个线程，每个线程8个数据
+Layout<Shape <_8, _8>, Stride<_?, _?>>
+
+// 2. 填好 thread 维度
+Layout<Shape <Shape <_2, _2, _2>, _8>,
+       Stride<Stride<_1,_16,_4>, _?>>
+
+// 3. 填好 thread 和 value 两个维度，最终版本
+Layout<Shape <Shape <_2, _2,_2>, Shape <_2,_2, _2>>,
+       Stride<Stride<_1,_16,_4>, Stride<_8,_2,_32>>>
+```
+
+这里 `(m,n)` 被编码成 column-major index：
+
+```text
+encoded(m,n) = m + n * 8
+```
+
+F32 accumulator 的映射复杂，是因为一个 thread 的 8 个 accumulator values 分散在 C tile 的多个位置。比如 `T0` 持有：
+
+```text
+(T0,V0) -> (0,0)
+(T0,V1) -> (0,1)
+(T0,V2) -> (2,0)
+(T0,V3) -> (2,1)
+(T0,V4) -> (0,4)
+(T0,V5) -> (0,5)
+(T0,V6) -> (2,4)
+(T0,V7) -> (2,5)
+```
+
+如果 accumulator 是 F16，Volta 的布局简单很多：
+
+```cpp
+using CLayout = Layout<Shape <_8,_8>,
+                       Stride<_1,_8>>;
+```
+
+因为此时：
+
+```text
+CLayout(t,v) = t + 8v = m + n * 8
+=> m = t, n = v
+```
+
+也就是每个 logical thread 持有 C tile 的一整行 accumulator。
+
+### 2. A/B layout 的坐标语义固定是 `(m,k)` 和 `(n,k)`
+
+CuTe 中，GEMM operand 的逻辑坐标约定是：
+
+```text
+A: (M,K)
+B: (N,K)
+C: (M,N)
+```
+
+所以：
+
+```text
+ALayout: (thread,value) -> (m,k)
+BLayout: (thread,value) -> (n,k)
+CLayout: (thread,value) -> (m,n)
+```
+
+`NT`、`TN`、`NN`、`TT` 不改变这些坐标名字。它们改变的是 thread/value 到这些坐标的具体映射方式，也就是 operand orientation。
+
+例如，TN 的 A layout 是：
+
+```cpp
+// (T8,V4) -> (m,k)
+using ALayout = Layout<Shape <_8,_4>,
+                       Stride<_1,_8>>;
+```
+
+而 NT 的 A layout 仍然输出 `(m,k)`，但映射模式不同：
+
+```cpp
+// (T8,V4) -> (m,k)
+using ALayout = Layout<Shape <Shape <_4,_2>,_4>,
+                       Stride<Stride<_8,_4>,_1>>;
+```
+
+可以把 BLAS flags 与 CuTe major 关系记成：
+
+```text
+NT:
+  A: M-major  (m,k):(1,ldA)
+  B: N-major  (n,k):(1,ldB)
+
+TN:
+  A: K-major  (m,k):(ldA,1)
+  B: K-major  (n,k):(ldB,1)
+
+NN:
+  A: M-major
+  B: K-major
+
+TT:
+  A: K-major
+  B: N-major
+```
+
+### 3. Hopper GMMA 的 64x8 是 CLayout 的基本 slice
+
+文档在构造 `SM90_64x128x16_F16F16F16F16_TN` 的 `CLayout` 时，先讲 64x8，是因为 GMMA 的 accumulator layout 以 64x8 作为基本 pattern。
+
+CUTLASS 代码中真实定义是：
+
+```cpp
+template<int N>
+using CLayout_64xN =
+  Layout<Shape <Shape <  _4,_8, _4>, Shape < _2,_2,Int<N/8>>>,
+         Stride<Stride<_128,_1,_16>, Stride<_64,_8,   _512>>>;
+
+using CLayout_64x128 = CLayout_64xN<128>;
+```
+
+所以：
+
+```text
+64x128 = 16 个 64x8 accumulator slice 沿 N 方向重复
+```
+
+`_512` 来自一个 64x8 slice 的元素数：
+
+```text
+64 * 8 = 512
+```
+
+因此 `SM90_64x128x16` 的最终 `CLayout` 可以理解为：
+
+```cpp
+Layout<
+  Shape <Shape <_4,_8,_4>, Shape <_2,_2,_16>>,
+  Stride<Stride<_128,_1,_16>, Stride<_64,_8,_512>>
+>
+```
+
+当前 CUTLASS 代码里已经不使用文档中的精确名字 `SM90_64x128x16_F16F16F16F16_TN`。代码里是 `SM90_64x128x16_F16F16F16_SS/RS<tnspA, tnspB, ...>` 这种形式，其中 `tnspA/tnspB` 表示 A/B 的 major。无论 SS/RS 或 A/B major 如何，C accumulator layout 都是 `GMMA::CLayout_64x128`。
+
+### 4. GMMA 的 A/B layout 不表达 shared memory swizzle
+
+文档中 GMMA A layout 的概念形式是：
+
+```cpp
+// (T128,V64x16) -> (M64,K16)
+using ALayout = Layout<Shape <_128, Shape <_64,_16>>,
+                       Stride<  _0, Stride< _1,_64>>>;
+```
+
+这里 thread 维度 stride 为 `_0`，含义是：
+
+```text
+所有 128 个线程都看到同一个 shared memory tile descriptor。
+```
+
+这不是 Volta/Ampere 那种每个 thread 各自持有一段 A register fragment 的模型。GMMA A/B operand 来自 shared memory descriptor。
+
+这段 `ALayout` 没有表达 swizzle。Swizzle 属于 shared memory tensor layout / GMMA descriptor construction，例如 CUTLASS 中的 `GMMA::smem_desc<tnspA>`、`Layout_MN_SW32_Atom`、`Layout_K_SW128_Atom` 等。可以分成两层：
+
+```text
+ALayout / BLayout:
+  描述 MMA atom 语义上需要什么 A/B tile。
+
+SMEM layout / descriptor:
+  描述这个 A/B tile 在 shared memory 中实际如何排列、是否 swizzle、swizzle 类型是否合法。
+```
+
+### 5. `TiledMMA` 的第三个参数是 MNK 逻辑 permutation
+
+下面这段：
+
+```cpp
+TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
+                              Layout<Shape <_2,_2>,
+                                     Stride<_2,_1>>{},
+                              Tile<Layout<Shape <_4,_4,_2>,
+                                          Stride<_1,_8,_4>>,
+                                   _32,
+                                   _4>{});
+```
+
+第二个参数：
+
+```cpp
+Layout<Shape <_2,_2>, Stride<_2,_1>>{}
+```
+
+表示把 `SM70_8x8x4` atom 按 2x2 复制，得到一个使用 4 个 quadpairs 的 16x16x4 TiledMMA。每个 atom 仍然是 8 个 logical threads，因此总共是 32 个 warp lanes。
+
+第三个参数：
+
+```cpp
+Tile<PermM, PermN, PermK>
+```
+
+不是 shared memory tile，也不是只给 A 用。它是整个 MMA tile 的 MNK 三个逻辑轴的 permutation：
+
+```text
+PermM = (4,4,2):(1,8,4)
+PermN = 32:1 identity
+PermK = 4:1 identity
+```
+
+它在 `TiledMMA` 的 partition 阶段应用：
+
+```text
+C 使用 PermM 和 PermN
+A 使用 PermM 和 PermK
+B 使用 PermN 和 PermK
+```
+
+所以 M permutation 同时影响 A 和 C，不影响 B；N permutation 同时影响 B 和 C；K permutation 同时影响 A 和 B。
+
+### 6. 这个 permutation 不改变 HMMA 的物理 quadpair
+
+对 SM70 HMMA atom，硬件层参与计算的 lanes 仍然是一个 quadpair：
+
+```text
+0,1,2,3,16,17,18,19
+```
+
+这个由 atom 的 `ThrID` 决定，不会被 `Tile` permutation 改变。
+
+`Tile` permutation 改变的是这些 lanes 的 fragment 对应 tensor 的哪些逻辑坐标。文档中的 M permutation 是 scatter：
+
+```text
+old m-coord:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 ...
+new m-coord:  0  1  2  3  8  9 10 11 16 17 18 19 24 25 26 27  4  5  6  7 ...
+```
+
+因此：
+
+```text
+old 0,1,2,3      -> new 0,1,2,3
+old 16,17,18,19  -> new 4,5,6,7
+```
+
+这正好把 quadpair 中 `0,1,2,3,16,17,18,19` 原本分散的 M 访问，在新的逻辑 M 视图中变成连续的 `0..7`。
+
+所以不是：
+
+```text
+8 个线程做 8x8x4 变成 4 个线程做 8x8x4
+```
+
+而是：
+
+```text
+仍然是 8 个 logical threads / quadpair 执行一个 8x8x4 atom；
+只是这些 lanes 的 A/C logical M 坐标被重编号。
+```
+
+### 7. permutation 发生在 fragment partition / load 之前
+
+这个 `Tile` permutation 不是计算完成之后对 C 做一次额外 permute。它发生在 `TiledMMA` partition tensor 的阶段：
+
+```cpp
+thr_mma.partition_A(sA)
+thr_mma.partition_B(sB)
+thr_mma.partition_C(gC)
+thr_mma.make_fragment_C(...)
+```
+
+也就是说：
+
+```text
+1. 先用 PermM/PermN/PermK 解释这个逻辑 MMA tile。
+2. partition_A / partition_B 决定每个线程应该从 A/B 的哪些坐标取数。
+3. 线程再从 shared memory load 到 register fragment。
+4. HMMA 使用这些 register fragment 计算。
+5. C fragment / store 也使用同一套 M/N 逻辑坐标解释。
+```
+
+因此它发生在：
+
+```text
+shared memory -> register fragment 的地址选择之前。
+```
+
+它不是额外 runtime 数据搬移，而是改变“每个线程访问 A/B/C tensor 的逻辑坐标解释”。
+
+### 8. `TiledMMA` permutation 与 `TiledCopy` / shared memory layout 要配套
+
+`TiledMMA` permutation 本身不会自动重排 shared memory 的物理布局。shared memory 中数据怎么摆，由你构造 `sA` / `sB` tensor 时的 layout，以及 global-to-shared 的 copy pattern 决定。
+
+可以这样分层：
+
+```text
+TiledMMA permutation:
+  定义 MMA 阶段如何 partition A/B/C tensor，
+  也就是 shared/register fragment 应该怎么看逻辑坐标。
+
+TiledCopy + sA_layout / sB_layout:
+  定义 global -> shared 怎么写，
+  以及 shared memory 中数据实际怎么摆。
+```
+
+如果 MMA 侧改变了 `PermM`，copy 侧和 shared memory layout 通常也要围绕同一个逻辑 layout 配套设计。否则数学上可能仍然一致，但访问可能不连续、无法 vectorize，或者产生更多 shared memory bank conflicts。
+
+可以把完整数据流记成：
+
+```text
+global tensor mA/mB
+  -> TiledCopy / copy partition
+  -> shared tensor sA/sB with sA_layout/sB_layout
+  -> TiledMMA / mma partition
+  -> register fragments
+  -> HMMA
+```
+
+文档里的 M permutation 的动机是让 A 的 M 访问从：
+
+```text
+0,1,2,3,16,17,18,19
+```
+
+在逻辑视图中变成：
+
+```text
+0,1,2,3,4,5,6,7
+```
+
+为了真正获得性能收益，copy pattern 和 shared memory layout 也应让这种逻辑连续对应到物理上更友好的 shared memory 地址。
+
 ## Copyright
 
 Copyright (c) 2017 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
