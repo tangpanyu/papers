@@ -14,13 +14,30 @@
 因此输出必须先帮我建立直觉图像，再进入公式和实现细节。
 不要只给压缩摘要；要把抽象概念翻译成“它像什么、数据怎么流、为什么这样做会省/会快/会更准”。
 
+## PDF 文件位置规则
+
+默认从当前 workspace 中查找 PDF。
+
+推荐目录结构：
+
+- `{category}/pdfs/`：存放原始论文 PDF
+- `{category}/docs/`：存放阅读笔记 Markdown
+
+例如：
+
+- `dnn/pdfs/Kimi Linear An Expressive Efficient Attention Architecture.pdf`
+- `dnn/docs/Kimi Team - 2025 - Kimi Linear An Expressive Efficient Attention Architecture.md`
+
+当用户只给论文名时：
+1. 先在当前目录及子目录中递归搜索匹配的 `.pdf`；
+2. 优先选择路径中包含 `pdf`、`paper`、`papers` 的文件；
+3. 如果有多个候选，列出候选并让用户确认；
+4. 如果找不到 PDF，提醒用户提供 PDF 路径或放入对应分类的 `pdfs` 目录。
+
 ## 输入规则
 
 默认输入是 PDF。
 
-PDF 中公式可能解析错误，尤其是上下标、多行公式、矩阵、algorithm 环境和自定义符号。
-因此：
-- 不要盲目信任 PDF 抽取公式；
 - 关键公式要结合上下文、变量定义和 shape 检查；
 - 如果公式明显异常，要说明不确定性；
 - 如果正文跳步，要主动查看 appendix / supplementary；
