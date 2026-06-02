@@ -80,14 +80,54 @@ $$
 Gated DeltaNet 单步公式：
 
 $$
-S_t=S_{t-1}\alpha_t(I-\beta_tk_tk_t^\top)+\beta_tv_tk_t^\top
+S_t=(I-\beta_tk_tk_t^\top)\alpha_tS_{t-1}+\beta_tk_tv_t^\top
 $$
 
 输出：
 
 $$
-o_t=S_tq_t
+o_t=S_t^\top q_t
 $$
+
+### 0.1 和当前 `lit_gpt` 代码的对应关系
+
+本文的手算采用当前仓库 `lit_gpt/gated_delta_rule_ops/chunk.py` 里的方向：
+
+```text
+S: [dk, dv]
+o = S.T @ q
+write = k @ v.T
+```
+
+代码里的单步 reference 等价于：
+
+$$
+S_t=\alpha_tS_{t-1}
++k_t\left[\beta_t\left(v_t-k_t^\top(\alpha_tS_{t-1})\right)\right]^\top
+$$
+
+输出是：
+
+$$
+o_t=q_t^\top S_t
+$$
+
+也可以展开成：
+
+$$
+S_t
+=\alpha_tS_{t-1}
+-\beta_tk_tk_t^\top(\alpha_tS_{t-1})
++\beta_tk_tv_t^\top
+$$
+
+这和前面的公式是同一件事，只是把“先 decay，再 delta erase/write”的语义展开了。读 `chunk.py`、`wy_fast.py`、`recurrent_gated_delta_rule_ref` 时，也应该使用这套 `S:[dk,dv]` 的方向。
+
+还有几个实现细节：
+
+- 代码默认 recurrent state 从全零开始；本文为了手算明显，取了 $S_0=I$，这相当于传入非空 `initial_state`。
+- 代码里输出前会把 $q$ 乘上 $d_k^{-0.5}$。本文为了整数/小数好算，等价于把这个 scale 临时设成 1。
+- 当前 `ChunkGatedDeltaRuleFunction.forward` 里把 `final_state = None` 写死了。底层 Triton kernel 支持 `STORE_FINAL_STATE`，但 wrapper 当前不会实际返回本文算出的 $S_{\text{next}}$。
 
 ## 1. 单步递推：token 1
 
@@ -116,10 +156,16 @@ $$
 旧状态经过衰减和擦除：
 
 $$
-\alpha_1S_0(I-\beta_1k_1k_1^\top)
-=0.5
+(I-\beta_1k_1k_1^\top)\alpha_1S_0
+=
 \begin{bmatrix}
 0.2 & 0 & 0\\
+0 & 1 & 0\\
+0 & 0 & 1
+\end{bmatrix}
+0.5
+\begin{bmatrix}
+1 & 0 & 0\\
 0 & 1 & 0\\
 0 & 0 & 1
 \end{bmatrix}
@@ -134,19 +180,19 @@ $$
 新写入项：
 
 $$
-\beta_1v_1k_1^\top
+\beta_1k_1v_1^\top
 =0.8
 \begin{bmatrix}
-2\\1\\0.5
+1\\0\\0
 \end{bmatrix}
 \begin{bmatrix}
-1 & 0 & 0
+2 & 1 & 0.5
 \end{bmatrix}
 =
 \begin{bmatrix}
-1.6 & 0 & 0\\
-0.8 & 0 & 0\\
-0.4 & 0 & 0
+1.6 & 0.8 & 0.4\\
+0 & 0 & 0\\
+0 & 0 & 0
 \end{bmatrix}
 $$
 
@@ -155,16 +201,16 @@ $$
 $$
 S_1=
 \begin{bmatrix}
-1.7 & 0 & 0\\
-0.8 & 0.5 & 0\\
-0.4 & 0 & 0.5
+1.7 & 0.8 & 0.4\\
+0 & 0.5 & 0\\
+0 & 0 & 0.5
 \end{bmatrix}
 $$
 
 输出：
 
 $$
-o_1=S_1q_1=
+o_1=S_1^\top q_1=
 \begin{bmatrix}
 1.7 & 0 & 0\\
 0.8 & 0.5 & 0\\
@@ -206,46 +252,46 @@ $$
 旧状态经过衰减和擦除：
 
 $$
-\alpha_2S_1(I-\beta_2k_2k_2^\top)
+(I-\beta_2k_2k_2^\top)\alpha_2S_1
 =
-0.25
-\begin{bmatrix}
-1.7 & 0 & 0\\
-0.8 & 0.5 & 0\\
-0.4 & 0 & 0.5
-\end{bmatrix}
 \begin{bmatrix}
 1 & 0 & 0\\
 0 & 0.5 & 0\\
 0 & 0 & 1
+\end{bmatrix}
+0.25
+\begin{bmatrix}
+1.7 & 0.8 & 0.4\\
+0 & 0.5 & 0\\
+0 & 0 & 0.5
 \end{bmatrix}
 $$
 
 $$
 =
 \begin{bmatrix}
-0.425 & 0 & 0\\
-0.2 & 0.0625 & 0\\
-0.1 & 0 & 0.125
+0.425 & 0.2 & 0.1\\
+0 & 0.0625 & 0\\
+0 & 0 & 0.125
 \end{bmatrix}
 $$
 
 新写入项：
 
 $$
-\beta_2v_2k_2^\top
+\beta_2k_2v_2^\top
 =0.5
 \begin{bmatrix}
-1\\3\\-1
+0\\1\\0
 \end{bmatrix}
 \begin{bmatrix}
-0 & 1 & 0
+1 & 3 & -1
 \end{bmatrix}
 =
 \begin{bmatrix}
-0 & 0.5 & 0\\
-0 & 1.5 & 0\\
-0 & -0.5 & 0
+0 & 0 & 0\\
+0.5 & 1.5 & -0.5\\
+0 & 0 & 0
 \end{bmatrix}
 $$
 
@@ -254,16 +300,16 @@ $$
 $$
 S_2=
 \begin{bmatrix}
-0.425 & 0.5 & 0\\
-0.2 & 1.5625 & 0\\
-0.1 & -0.5 & 0.125
+0.425 & 0.2 & 0.1\\
+0.5 & 1.5625 & -0.5\\
+0 & 0 & 0.125
 \end{bmatrix}
 $$
 
 输出：
 
 $$
-o_2=S_2q_2=
+o_2=S_2^\top q_2=
 \begin{bmatrix}
 0.425 & 0.5 & 0\\
 0.2 & 1.5625 & 0\\
@@ -278,7 +324,7 @@ o_2=S_2q_2=
 \end{bmatrix}
 $$
 
-单步 recurrent reference 的最终答案：
+单步 recurrent 的最终答案：
 
 $$
 O=
@@ -291,15 +337,959 @@ $$
 $$
 S_{\text{next}}=
 \begin{bmatrix}
-0.425 & 0.5 & 0\\
-0.2 & 1.5625 & 0\\
-0.1 & -0.5 & 0.125
+0.425 & 0.2 & 0.1\\
+0.5 & 1.5625 & -0.5\\
+0 & 0 & 0.125
+\end{bmatrix}
+$$
+
+
+## 2.1 从单步递推推到 chunkwise 公式
+
+这一节先不代数字，只推公式。目标是解释后面这些东西为什么会出现：
+
+$$
+\gamma,\quad \Gamma,\quad D,\quad \overleftarrow{Q},\quad \overrightarrow{K}
+$$
+
+### 2.1.1 把单步公式改写成“旧状态 + 有效写入”
+
+单步公式：
+
+$$
+S_t=(I-\beta_tk_tk_t^\top)\alpha_tS_{t-1}+\beta_tk_tv_t^\top
+$$
+
+因为 $\alpha_t$ 是标量，可以写成：
+
+$$
+S_t=\alpha_tS_{t-1}-\beta_tk_tk_t^\top(\alpha_tS_{t-1})+\beta_tk_tv_t^\top
+$$
+
+合并后两项：
+
+$$
+S_t=\alpha_tS_{t-1}+k_t\left[\beta_t(v_t-(\alpha_tS_{t-1})^\top k_t)\right]^\top
+$$
+
+定义当前 token 的 effective write：
+
+$$
+d_t=\beta_t(v_t-(\alpha_tS_{t-1})^\top k_t)\in\mathbb{R}^{d_v}
+$$
+
+那么：
+
+$$
+S_t=\alpha_tS_{t-1}+k_td_t^\top
+$$
+
+直觉：先把旧状态整体衰减，再把“新 value 减掉旧 state 在当前 key 下读出来的旧 value”写入当前 key 方向。
+
+### 2.1.2 展开两个 token
+
+第 1 个 token：
+
+$$
+S_1=\alpha_1S_0+k_1d_1^\top
+$$
+
+第 2 个 token：
+
+$$
+S_2=\alpha_2S_1+k_2d_2^\top
+$$
+
+把 $S_1$ 代进去：
+
+$$
+S_2=\alpha_2(\alpha_1S_0+k_1d_1^\top)+k_2d_2^\top
+$$
+
+所以：
+
+$$
+S_2=\alpha_1\alpha_2S_0+\alpha_2k_1d_1^\top+k_2d_2^\top
+$$
+
+定义：
+
+$$
+\gamma_1=\alpha_1,\quad \gamma_2=\alpha_1\alpha_2
+$$
+
+则：
+
+$$
+S_2=\gamma_2S_0+\frac{\gamma_2}{\gamma_1}k_1d_1^\top+k_2d_2^\top
+$$
+
+因为：
+
+$$
+\frac{\gamma_2}{\gamma_1}=\alpha_2
+$$
+
+这解释了为什么第 1 个 token 的写入传到 chunk 末尾时要乘 $\gamma_2/\gamma_1$。
+
+### 2.1.3 输出为什么是 old + intra
+
+第 $r$ 个输出是：
+
+$$
+o_r=S_r^\top q_r
+$$
+
+任意位置 $r$ 的 state 可以写成：
+
+$$
+S_r=\gamma_rS_0+\sum_{i=1}^{r}\frac{\gamma_r}{\gamma_i}k_id_i^\top
+$$
+
+所以：
+
+$$
+o_r
+=\gamma_rS_0^\top q_r+
+\sum_{i=1}^{r}\frac{\gamma_r}{\gamma_i}d_i(k_i^\top q_r)
+$$
+
+转成矩阵行向量写法：
+
+$$
+O
+=\overleftarrow{Q}S_0+
+\left((QK^\top)\odot\Gamma\right)D
+$$
+
+其中：
+
+$$
+\overleftarrow{Q}_r=\gamma_rq_r
+$$
+
+$$
+\Gamma_{r,i}=
+\begin{cases}
+\gamma_r/\gamma_i,& r\ge i\\
+0,& r<i
+\end{cases}
+$$
+
+$$
+D=
+\begin{bmatrix}
+d_1^\top\\
+d_2^\top\\
+\cdots
+\end{bmatrix}
+$$
+
+也就是：
+
+$$
+O_{\text{old}}=\overleftarrow{Q}S_0
+$$
+
+$$
+O_{\text{intra}}=((QK^\top)\odot\Gamma)D
+$$
+
+### 2.1.4 $D$ 为什么不只是 $\operatorname{diag}(\beta)V$
+
+注意 $d_t$ 里面有 $S_{t-1}$：
+
+$$
+d_t=\beta_t(v_t-(\alpha_tS_{t-1})^\top k_t)
+$$
+
+而 $S_{t-1}$ 已经包含前面 token 写入的内容。因此一般情况下，$d_t$ 会受到之前 $d_i$ 的影响。
+
+把 $S_{t-1}$ 的展开代入：
+
+$$
+(\alpha_tS_{t-1})^\top k_t
+=\gamma_tS_0^\top k_t+
+\sum_{i<t}\frac{\gamma_t}{\gamma_i}d_i(k_i^\top k_t)
+$$
+
+所以：
+
+$$
+d_t=\beta_tv_t
+-\beta_t\gamma_tS_0^\top k_t
+-\beta_t\sum_{i<t}\frac{\gamma_t}{\gamma_i}d_i(k_i^\top k_t)
+$$
+
+这就是 chunkwise 算法需要 lower-triangular solve 的根本原因：每个 $d_t$ 不只依赖 $v_t$，还依赖之前所有 $d_i$ 和 key 相似度 $k_i^\top k_t$。在 Gated DeltaNet 里，这个依赖会进入 $U_g$ 的构造。
+
+在这个例子里，$k_1^\top k_2=0$，两个 key 正交，所以交叉项刚好消失：
+
+$$
+d_1=\beta_1v_1-\beta_1\gamma_1S_0^\top k_1
+$$
+
+$$
+d_2=\beta_2v_2-\beta_2\gamma_2S_0^\top k_2
+$$
+
+这就是后面能直接写：
+
+$$
+D=U_g-\overleftarrow{W}S_0
+$$
+
+的原因。一般 key 不正交时，$A_u/A_w$ 这两个 lower-triangular inverse 会把那些交叉项吸收进去。
+
+### 2.1.4.1 $D$、$W$、$U_g$ 的关系
+
+论文 2.2 的 DeltaNet preliminary 里先定义了 $W$ 和 $U$。到了 Gated DeltaNet 的论文 3.3，写入侧不再是普通 $U$，而是带 decay-aware 递推的 $U_g$。这三个量容易混在一起，可以这样区分：
+
+- $W$ 负责表示“擦除方向”，也就是每个 token 怎样从旧 state 里减掉 $S^\top k$。
+- $U_g$ 负责表示 Gated DeltaNet 里已经吸收 chunk 内 decay 依赖的写入内容。
+- $D$ 是 effective write，表示“写入内容减去旧 state 擦除项”。
+
+没有 gate 的 DeltaNet 单步公式：
+
+$$
+S_t=(I-\beta_tk_tk_t^\top)S_{t-1}+\beta_tk_tv_t^\top
+$$
+
+也就是：
+
+$$
+S_t=S_{t-1}+k_t\left[\beta_t(v_t-S_{t-1}^\top k_t)\right]^\top
+$$
+
+如果 chunk 内所有 key 都互不影响，那么普通 DeltaNet 里可以直接写：
+
+$$
+W=\operatorname{diag}(\beta)K,\quad U=\operatorname{diag}(\beta)V
+$$
+
+这时：
+
+$$
+D=U-WS_0
+$$
+
+因为第 $t$ 行：
+
+$$
+D_t=U_t-W_tS_0=\beta_tv_t^\top-\beta_tk_t^\top S_0
+$$
+
+转成列向量就是：
+
+$$
+d_t=\beta_t(v_t-S_0^\top k_t)
+$$
+
+一般情况下，chunk 内前面的写入会影响后面的擦除，所以不能只用 $\operatorname{diag}(\beta)V$ 和 $\operatorname{diag}(\beta)K$。先看没有 gate 的 DeltaNet，它用一个 lower-triangular inverse 吸收 chunk 内依赖：
+
+$$
+A_w=
+\left[
+I+\operatorname{strictLower}\left(\operatorname{diag}(\beta)KK^\top\right)
+\right]^{-1}
+$$
+
+$$
+W=A_w\operatorname{diag}(\beta)K,\quad
+U=A_w\operatorname{diag}(\beta)V
+$$
+
+shape 是：
+
+$$
+A_w\in\mathbb{R}^{C\times C},\quad
+W\in\mathbb{R}^{C\times d_k},\quad
+U\in\mathbb{R}^{C\times d_v}
+$$
+
+Gated DeltaNet 多了 $\alpha$ 衰减。论文 3.3 里不是简单复用普通 $U$，而是定义 decay-aware 的 $U_g$：
+
+$$
+A_u=
+\left[
+I+\operatorname{strictLower}\left(
+\operatorname{diag}(\beta)(\Gamma\odot KK^\top)
+\right)
+\right]^{-1}
+$$
+
+$$
+U_g=A_u\operatorname{diag}(\beta)V
+$$
+
+其中：
+
+$$
+\Gamma_{r,i}=
+\begin{cases}
+\gamma_r/\gamma_i,& r\ge i\\
+0,& r<i
+\end{cases}
+$$
+
+直觉是：chunk 内第 $i$ 个 token 的写入影响第 $r$ 个 token 时，中间会经历相对衰减 $\gamma_r/\gamma_i$。所以这个 decay ratio 出现在 $U_g$ 的 lower-triangular solve 里。
+
+擦旧 state 的 $W$ 仍然先按普通 DeltaNet 的方式得到，然后再按当前位置乘上从 chunk 开头到当前位置的 absolute decay：
+
+$$
+\overleftarrow{W}_i=\gamma_i W_i
+$$
+
+同理，读旧 state 的 query 和传到 chunk 末尾的 key 也要带 decay：
+
+$$
+\overleftarrow{Q}_r=\gamma_r Q_r
+$$
+
+$$
+\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}K_i
+$$
+
+因此 Gated DeltaNet 里对应的是：
+
+$$
+D=U_g-\overleftarrow{W}S_0
+$$
+
+$$
+O=\overleftarrow{Q}S_0+((QK^\top)\odot\Gamma)D
+$$
+
+$$
+S_C=\gamma_CS_0+\overrightarrow{K}^\top D
+$$
+
+这里的核心关系就是：
+
+$$
+\boxed{D=U_g-\overleftarrow{W}S_0}
+$$
+
+$U_g$ 是准备写入的新内容，$\overleftarrow{W}S_0$ 是从旧 state 里读出来、需要被擦掉的旧内容，两者相减后才是当前 chunk 真正贡献给输出和下一状态的 effective write。
+
+和当前代码对应：
+
+```text
+u / k_cumsum:
+  U_g = A_u @ (beta * V)
+  A_u 的 strict-lower 里带 L_mask = gamma_r / gamma_i
+
+w / k_cumdecay:
+  W = A_w @ (beta * K)
+  A_w 的 strict-lower 里不带 L_mask
+
+chunk_fwd_h_fn 里:
+  W_left = gamma * W
+  D = U_g - W_left @ S
+```
+
+### 2.1.5 state update 为什么是 $\overrightarrow K^\top D$
+
+chunk 末尾状态：
+
+$$
+S_C=\gamma_CS_0+\sum_{i=1}^{C}\frac{\gamma_C}{\gamma_i}k_id_i^\top
+$$
+
+把所有 $d_i^\top$ 堆成：
+
+$$
+D\in\mathbb{R}^{C\times d_v}
+$$
+
+把所有衰减到 chunk 末尾的 key 堆成：
+
+$$
+\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}k_i^\top
+$$
+
+则：
+
+$$
+\overrightarrow{K}^\top D
+=
+\sum_{i=1}^{C}\left(\frac{\gamma_C}{\gamma_i}k_i\right)d_i^\top
+$$
+
+所以：
+
+$$
+S_C=\gamma_CS_0+\overrightarrow K^\top D
+$$
+
+shape 对齐：
+
+$$
+D\in\mathbb{R}^{C\times d_v},\quad
+\overrightarrow K\in\mathbb{R}^{C\times d_k},\quad
+\overrightarrow K^\top D\in\mathbb{R}^{d_k\times d_v}
+$$
+
+## 3. 把两个 token 组成 chunk
+
+把两个 token 堆成矩阵：
+
+$$
+Q=
+\begin{bmatrix}
+1 & 1 & 0.5\\
+1 & -1 & 2
+\end{bmatrix}
+$$
+
+$$
+K=
+\begin{bmatrix}
+1 & 0 & 0\\
+0 & 1 & 0
+\end{bmatrix}
+$$
+
+$$
+V=
+\begin{bmatrix}
+2 & 1 & 0.5\\
+1 & 3 & -1
+\end{bmatrix}
+$$
+
+shape：
+
+$$
+Q,K,V\in\mathbb{R}^{C\times d}=\mathbb{R}^{2\times 3}
+$$
+
+$$
+S_0\in\mathbb{R}^{d_k\times d_v}=\mathbb{R}^{3\times 3}
+$$
+
+## 4. 衰减 gamma 到底是什么
+
+chunk 内 cumulative decay：
+
+$$
+\gamma_1=\alpha_1=0.5
+$$
+
+$$
+\gamma_2=\alpha_1\alpha_2=0.5\times0.25=0.125
+$$
+
+所以：
+
+$$
+\gamma=
+\begin{bmatrix}
+0.5\\
+0.125
+\end{bmatrix}
+$$
+
+decay-aware causal mask：
+
+$$
+\Gamma_{r,i}=
+\begin{cases}
+\gamma_r/\gamma_i,& r\ge i\\
+0,& r<i
+\end{cases}
+$$
+
+具体是：
+
+$$
+\Gamma=
+\begin{bmatrix}
+1 & 0\\
+0.25 & 1
+\end{bmatrix}
+$$
+
+## 5. 旧 state 的读取：left decay Q
+
+初始 state 对第 $r$ 个输出的贡献要经过 $\gamma_r$：
+
+$$
+\overleftarrow{Q}=
+\begin{bmatrix}
+\gamma_1q_1^\top\\
+\gamma_2q_2^\top
+\end{bmatrix}
+=
+\begin{bmatrix}
+0.5 & 0.5 & 0.25\\
+0.125 & -0.125 & 0.25
+\end{bmatrix}
+$$
+
+旧 state 直接读出来：
+
+$$
+O_{\text{old}}=\overleftarrow{Q}S_0
+=
+\begin{bmatrix}
+0.5 & 0.5 & 0.25\\
+0.125 & -0.125 & 0.25
+\end{bmatrix}
+$$
+
+shape：
+
+$$
+\overleftarrow{Q}S_0:
+[2,3]\times[3,3]\rightarrow[2,3]
+$$
+
+## 6. W、$U_g$、D 的数值计算
+
+这个例子里 $k_1,k_2$ 正交，所以：
+
+$$
+K K^\top=
+\begin{bmatrix}
+1 & 0\\
+0 & 1
+\end{bmatrix}
+$$
+
+严格下三角交叉项为 0。因此无论是 $A_w$ 还是带 $\Gamma$ 的 $A_u$，都退化成单位阵。也就是说，这个小例子里看不出 $A_w$ 和 $A_u$ 的差别：
+
+$$
+W=
+\begin{bmatrix}
+\beta_1k_1^\top\\
+\beta_2k_2^\top
+\end{bmatrix}
+=
+\begin{bmatrix}
+0.8 & 0 & 0\\
+0 & 0.5 & 0
+\end{bmatrix}
+$$
+
+$$
+U_g=
+\begin{bmatrix}
+\beta_1v_1^\top\\
+\beta_2v_2^\top
+\end{bmatrix}
+=
+\begin{bmatrix}
+1.6 & 0.8 & 0.4\\
+0.5 & 1.5 & -0.5
+\end{bmatrix}
+$$
+
+擦旧 state 的动作要带上当前位置对应的 decay：
+
+$$
+\overleftarrow{W}=
+\begin{bmatrix}
+\gamma_1 W_1\\
+\gamma_2 W_2
+\end{bmatrix}
+=
+\begin{bmatrix}
+0.4 & 0 & 0\\
+0 & 0.0625 & 0
+\end{bmatrix}
+$$
+
+当前 chunk 的 effective write：
+
+$$
+D=U_g-\overleftarrow{W}S_0
+$$
+
+因为 $S_0$ 是单位矩阵：
+
+$$
+D=
+\begin{bmatrix}
+1.6 & 0.8 & 0.4\\
+0.5 & 1.5 & -0.5
+\end{bmatrix}
+-
+\begin{bmatrix}
+0.4 & 0 & 0\\
+0 & 0.0625 & 0
+\end{bmatrix}
+$$
+
+$$
+=
+\begin{bmatrix}
+1.2 & 0.8 & 0.4\\
+0.5 & 1.4375 & -0.5
+\end{bmatrix}
+$$
+
+shape：
+
+$$
+U_g:[2,3],\quad
+\overleftarrow{W}S_0:[2,3]\times[3,3]\rightarrow[2,3],\quad
+D:[2,3]
+$$
+
+## 7. chunk 内 attention-like 读取
+
+先算普通 score：
+
+$$
+QK^\top=
+\begin{bmatrix}
+1 & 1\\
+1 & -1
+\end{bmatrix}
+$$
+
+加上 causal 和 decay：
+
+$$
+A=(QK^\top)\odot\Gamma
+=
+\begin{bmatrix}
+1 & 0\\
+0.25 & -1
+\end{bmatrix}
+$$
+
+chunk 内新写入贡献：
+
+$$
+O_{\text{intra}}=AD
+$$
+
+具体：
+
+$$
+O_{\text{intra}}=
+\begin{bmatrix}
+1 & 0\\
+0.25 & -1
+\end{bmatrix}
+\begin{bmatrix}
+1.2 & 0.8 & 0.4\\
+0.5 & 1.4375 & -0.5
+\end{bmatrix}
+$$
+
+$$
+=
+\begin{bmatrix}
+1.2 & 0.8 & 0.4\\
+-0.2 & -1.2375 & 0.6
+\end{bmatrix}
+$$
+
+shape：
+
+$$
+A D:[2,2]\times[2,3]\rightarrow[2,3]
+$$
+
+最终输出：
+
+$$
+O=O_{\text{old}}+O_{\text{intra}}
+$$
+
+$$
+O=
+\begin{bmatrix}
+0.5 & 0.5 & 0.25\\
+0.125 & -0.125 & 0.25
+\end{bmatrix}
++
+\begin{bmatrix}
+1.2 & 0.8 & 0.4\\
+-0.2 & -1.2375 & 0.6
+\end{bmatrix}
+$$
+
+$$
+=
+\begin{bmatrix}
+1.7 & 1.3 & 0.65\\
+-0.075 & -1.3625 & 0.85
+\end{bmatrix}
+$$
+
+这和单步 recurrent 算出来的 $o_1,o_2$ 完全一致。
+
+## 8. chunk 末尾 state 怎么更新
+
+chunk 结束后，初始 state 本身要衰减到 chunk 末尾：
+
+$$
+\gamma_C S_0=0.125S_0=
+\begin{bmatrix}
+0.125 & 0 & 0\\
+0 & 0.125 & 0\\
+0 & 0 & 0.125
+\end{bmatrix}
+$$
+
+第 $i$ 个 token 的写入传到 chunk 末尾，要乘：
+
+$$
+\gamma_C/\gamma_i
+$$
+
+所以 right-decayed key 是：
+
+$$
+\overrightarrow{K}=
+\begin{bmatrix}
+(\gamma_2/\gamma_1)k_1^\top\\
+(\gamma_2/\gamma_2)k_2^\top
+\end{bmatrix}
+=
+\begin{bmatrix}
+0.25 & 0 & 0\\
+0 & 1 & 0
+\end{bmatrix}
+$$
+
+state update：
+
+$$
+S_{\text{next}}=\gamma_CS_0+\overrightarrow{K}^\top D
+$$
+
+先算：
+
+$$
+\overrightarrow{K}^\top=
+\begin{bmatrix}
+0.25 & 0\\
+0 & 1\\
+0 & 0
+\end{bmatrix}
+$$
+
+$$
+\overrightarrow{K}^\top D
+=
+\begin{bmatrix}
+0.25 & 0\\
+0 & 1\\
+0 & 0
+\end{bmatrix}
+\begin{bmatrix}
+1.2 & 0.8 & 0.4\\
+0.5 & 1.4375 & -0.5
+\end{bmatrix}
+$$
+
+$$
+=
+\begin{bmatrix}
+0.3 & 0.2 & 0.1\\
+0.5 & 1.4375 & -0.5\\
+0 & 0 & 0
+\end{bmatrix}
+$$
+
+因此：
+
+$$
+S_{\text{next}}=
+\begin{bmatrix}
+0.125 & 0 & 0\\
+0 & 0.125 & 0\\
+0 & 0 & 0.125
+\end{bmatrix}
++
+\begin{bmatrix}
+0.3 & 0.2 & 0.1\\
+0.5 & 1.4375 & -0.5\\
+0 & 0 & 0
+\end{bmatrix}
+$$
+
+$$
+=
+\begin{bmatrix}
+0.425 & 0.2 & 0.1\\
+0.5 & 1.5625 & -0.5\\
+0 & 0 & 0.125
+\end{bmatrix}
+$$
+
+这也和单步递推的 $S_2$ 完全一致。
+
+shape：
+
+$$
+\overrightarrow K^\top D:
+[3,2]\times[2,3]\rightarrow[3,3]
+$$
+
+这里最能看出为什么用 $C=2,d=3$ 更清楚：state update 里的中间维度是 chunk size $C=2$，输出矩阵维度是 $d_k\times d_v=3\times3$。
+
+## 9. 把这个例子翻译成 kernel 流程
+
+本节沿用前面手算和当前 `chunk.py` 一致的方向：
+
+```text
+S: [Dk, Dv]
+O = Q_left @ S + A @ D
+S_next = gamma[C] * S + K_right.T @ D
+```
+
+对一个 chunk，kernel 里的数据 shape 是：
+
+```text
+Q:      [C, Dk] = [2, 3]
+K:      [C, Dk] = [2, 3]
+V:      [C, Dv] = [2, 3]
+S:      [Dk,Dv] = [3, 3]
+alpha:  [C]     = [2]
+beta:   [C]     = [2]
+O:      [C, Dv] = [2, 3]
+S_next: [Dk,Dv] = [3, 3]
+```
+
+完整流程：
+
+```text
+1. gamma = cumulative_product(alpha)
+
+2. Q_left[r] = gamma[r] * Q[r]
+
+3. Gamma[r, i] = gamma[r] / gamma[i], only for r >= i
+
+4. 计算 W 和 U_g
+   简单正交例子里：
+   W = diag(beta) @ K
+   U_g = diag(beta) @ V
+
+   一般情况里：
+   A_u = inverse_lower(I + strict_lower(diag(beta) @ (Gamma ⊙ (K @ K.T))))
+   U_g = A_u @ (diag(beta) @ V)
+
+   A_w = inverse_lower(I + strict_lower(diag(beta) @ (K @ K.T)))
+   W = A_w @ (diag(beta) @ K)
+
+5. W_left[r] = gamma[r] * W[r]
+
+6. D = U_g - W_left @ S
+
+7. A = causal((Q @ K.T) ⊙ Gamma)
+
+8. O = Q_left @ S + A @ D
+
+9. K_right[i] = gamma[C] / gamma[i] * K[i]
+
+10. S_next = gamma[C] * S + K_right.T @ D
+```
+
+最重要的 shape 对齐：
+
+```text
+Q_left @ S:
+  [2,3] @ [3,3] -> [2,3]
+
+W_left @ S:
+  [2,3] @ [3,3] -> [2,3]
+
+A @ D:
+  [2,2] @ [2,3] -> [2,3]
+
+K_right.T @ D:
+  [3,2] @ [2,3] -> [3,3]
+```
+
+## 10. 为什么论文里要用箭头
+
+箭头只是为了说明“这个张量已经被衰减到哪个位置”。
+
+可以这样记：
+
+$$
+\overleftarrow{Q}_r=\gamma_rQ_r
+$$
+
+这是从 chunk 开头的 state 衰减到第 $r$ 个 query。
+
+$$
+\overleftarrow{W}_r=\gamma_rW_r
+$$
+
+这是旧 state 被第 $r$ 个 token 擦除时需要带上的衰减。
+
+$$
+\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}K_i
+$$
+
+这是第 $i$ 个 token 写入后继续传到 chunk 末尾的衰减。
+
+$$
+\Gamma_{r,i}=\frac{\gamma_r}{\gamma_i}
+$$
+
+这是第 $i$ 个 token 的写入影响第 $r$ 个 query 时经历的衰减。
+
+所以，衰减并没有改变核心结构。它只是把 token 间的 $\alpha$ 累乘提前塞进 $Q,W,K$ 和 score mask 里，让 chunk 内还能写成矩阵乘法。
+
+## 11. 写 kernel 时的最小实现建议
+
+先写这个顺序，不要一开始追求融合：
+
+```text
+Kernel / function 1:
+  计算 gamma 和 Gamma
+
+Kernel / function 2:
+  计算 KKT = K @ K.T
+  计算 A_u = inverse_lower(I + strict_lower(diag(beta) @ (Gamma ⊙ KKT)))
+  计算 U_g = A_u @ (diag(beta) @ V)
+  计算 A_w = inverse_lower(I + strict_lower(diag(beta) @ KKT))
+  计算 W = A_w @ (diag(beta) @ K)
+
+Kernel / function 3:
+  计算 D = U_g - W_left @ S
+  计算 O = Q_left @ S + A @ D
+  计算 S_next = gamma_C * S + K_right.T @ D
+```
+
+等 reference 对齐后再融合：
+
+- 不要 materialize `Q_left`，load `Q` 时乘 `gamma[r]`。
+- 不要 materialize `K_right`，load `K` 时乘 `gamma_C / gamma[i]`。
+- `Gamma` 如果 chunk 很小，可以放 shared memory。
+- `T` 是 $C\times C$ lower triangular，小 chunk 时适合放 shared memory。
+- `K_right.T @ D` 是 state update 的核心 GEMM-like 部分，后续优化重点在这里。
+
+这个例子可以作为 kernel 单元测试。输入上面的数字，chunkwise kernel 应该输出：
+
+$$
+O=
+\begin{bmatrix}
+1.7 & 1.3 & 0.65\\
+-0.075 & -1.3625 & 0.85
+\end{bmatrix}
+$$
+
+$$
+S_{\text{next}}=
+\begin{bmatrix}
+0.425 & 0.2 & 0.1\\
+0.5 & 1.5625 & -0.5\\
+0 & 0 & 0.125
 \end{bmatrix}
 $$
 
 ## 12. KDA：Kimi Delta Attention 的计算推理优化
 
-这一章对应 `tech_report.pdf` 里的 Kimi Delta Attention。KDA 可以理解成：
+这一章对应 `KDA` 里的 Kimi Delta Attention。KDA 可以理解成：
 
 ```text
 KDA = Gated DeltaNet + channel-wise decay + 更省的 DPLR/chunkwise 实现
@@ -315,21 +1305,13 @@ $$
 
 ### 12.1 先注意 state 方向
 
-Kimi Linear 技术报告里的 state 方向和前面 GDN 手算例子是转置关系。
-
-前面这份 GDN 例子为了方便写成：
-
-$$
-S\in\mathbb{R}^{d_v\times d_k},\quad o_t=S_tq_t
-$$
-
-Kimi 技术报告使用：
+Kimi Linear 技术报告、当前 `chunk.py`、以及前面的 GDN 手算例子都使用同一个 state 方向：
 
 $$
 S\in\mathbb{R}^{d_k\times d_v},\quad o_t=S_t^\top q_t
 $$
 
-两种写法本质一样，只是转置。下面讲 KDA 时跟随 Kimi 技术报告：
+也就是：
 
 ```text
 q, k: [dk]
@@ -357,7 +1339,7 @@ $$
 和 GDN 对比：
 
 $$
-\text{GDN:}\quad S_t=\alpha_t(I-\beta_tk_tk_t^\top)S_{t-1}+\beta_tk_tv_t^\top
+\text{GDN:}\quad S_t=(I-\beta_tk_tk_t^\top)\alpha_tS_{t-1}+\beta_tk_tv_t^\top
 $$
 
 $$
@@ -522,19 +1504,17 @@ $$
 D=U-WS
 $$
 
-注意这里因为 Kimi 公式使用 $S:[d_k,d_v]$，所以是：
+注意这里的 shape 是：
 
 $$
 W S:[C,d_k]\times[d_k,d_v]\rightarrow[C,d_v]
 $$
 
-前面 GDN 手算例子用的是 $S:[d_v,d_k]$，所以那里写成：
+前面 GDN 手算例子也使用同一个方向，所以对应写成：
 
 $$
-D=U-\overleftarrow{W}S_0^\top
+D=U_g-\overleftarrow{W}S_0
 $$
-
-这两个是同一件事的转置版本。
 
 ### 12.7 KDA 的输出计算
 
@@ -582,7 +1562,7 @@ O = 读旧 state + 读 chunk 内新写入
 这和 GDN 的：
 
 $$
-O=\overleftarrow{Q}S_0^\top+((QK^\top)\odot\Gamma)D
+O=\overleftarrow{Q}S_0+((QK^\top)\odot\Gamma)D
 $$
 
 是同一个 mental model，只是 KDA 的 $\Gamma$ 是 channel-wise 的，不再是简单 scalar mask。
@@ -786,876 +1766,3 @@ state update:
 等正确性对齐后，再考虑把 decay scaling 融合进 load，把 $A$、$D$、state update 放进 shared/register tile。
 
 后面的 chunkwise 算法必须和这个结果完全一致。
-
-## 2.5 从单步递推推到 chunkwise 公式
-
-这一节先不代数字，只推公式。目标是解释后面这些东西为什么会出现：
-
-$$
-\gamma,\quad \Gamma,\quad D,\quad \overleftarrow{Q},\quad \overrightarrow{K}
-$$
-
-### 2.5.1 把单步公式改写成“旧状态 + 有效写入”
-
-单步公式：
-
-$$
-S_t=S_{t-1}\alpha_t(I-\beta_tk_tk_t^\top)+\beta_tv_tk_t^\top
-$$
-
-因为 $\alpha_t$ 是标量，可以写成：
-
-$$
-S_t=\alpha_tS_{t-1}-\alpha_t\beta_tS_{t-1}k_tk_t^\top+\beta_tv_tk_t^\top
-$$
-
-合并后两项：
-
-$$
-S_t=\alpha_tS_{t-1}+\beta_t(v_t-\alpha_tS_{t-1}k_t)k_t^\top
-$$
-
-定义当前 token 的 effective write：
-
-$$
-d_t=\beta_t(v_t-\alpha_tS_{t-1}k_t)\in\mathbb{R}^{d_v}
-$$
-
-那么：
-
-$$
-S_t=\alpha_tS_{t-1}+d_tk_t^\top
-$$
-
-直觉：先把旧状态整体衰减，再把“新 value 减掉旧 state 在当前 key 下读出来的旧 value”写入当前 key 方向。
-
-### 2.5.2 展开两个 token
-
-第 1 个 token：
-
-$$
-S_1=\alpha_1S_0+d_1k_1^\top
-$$
-
-第 2 个 token：
-
-$$
-S_2=\alpha_2S_1+d_2k_2^\top
-$$
-
-把 $S_1$ 代进去：
-
-$$
-S_2=\alpha_2(\alpha_1S_0+d_1k_1^\top)+d_2k_2^\top
-$$
-
-所以：
-
-$$
-S_2=\alpha_1\alpha_2S_0+\alpha_2d_1k_1^\top+d_2k_2^\top
-$$
-
-定义：
-
-$$
-\gamma_1=\alpha_1,\quad \gamma_2=\alpha_1\alpha_2
-$$
-
-则：
-
-$$
-S_2=\gamma_2S_0+\frac{\gamma_2}{\gamma_1}d_1k_1^\top+d_2k_2^\top
-$$
-
-因为：
-
-$$
-\frac{\gamma_2}{\gamma_1}=\alpha_2
-$$
-
-这解释了为什么第 1 个 token 的写入传到 chunk 末尾时要乘 $\gamma_2/\gamma_1$。
-
-### 2.5.3 输出为什么是 old + intra
-
-第 $r$ 个输出是：
-
-$$
-o_r=S_rq_r
-$$
-
-任意位置 $r$ 的 state 可以写成：
-
-$$
-S_r=\gamma_rS_0+\sum_{i=1}^{r}\frac{\gamma_r}{\gamma_i}d_ik_i^\top
-$$
-
-所以：
-
-$$
-o_r
-=\gamma_rS_0q_r+
-\sum_{i=1}^{r}\frac{\gamma_r}{\gamma_i}d_i(k_i^\top q_r)
-$$
-
-转成矩阵行向量写法：
-
-$$
-O
-=\overleftarrow{Q}S_0^\top+
-\left((QK^\top)\odot\Gamma\right)D
-$$
-
-其中：
-
-$$
-\overleftarrow{Q}_r=\gamma_rq_r
-$$
-
-$$
-\Gamma_{r,i}=
-\begin{cases}
-\gamma_r/\gamma_i,& r\ge i\\
-0,& r<i
-\end{cases}
-$$
-
-$$
-D=
-\begin{bmatrix}
-d_1^\top\\
-d_2^\top\\
-\cdots
-\end{bmatrix}
-$$
-
-也就是：
-
-$$
-O_{\text{old}}=\overleftarrow{Q}S_0^\top
-$$
-
-$$
-O_{\text{intra}}=((QK^\top)\odot\Gamma)D
-$$
-
-### 2.5.4 $D$ 为什么不只是 $\operatorname{diag}(\beta)V$
-
-注意 $d_t$ 里面有 $S_{t-1}$：
-
-$$
-d_t=\beta_t(v_t-\alpha_tS_{t-1}k_t)
-$$
-
-而 $S_{t-1}$ 已经包含前面 token 写入的内容。因此一般情况下，$d_t$ 会受到之前 $d_i$ 的影响。
-
-把 $S_{t-1}$ 的展开代入：
-
-$$
-\alpha_tS_{t-1}k_t
-=\gamma_tS_0k_t+
-\sum_{i<t}\frac{\gamma_t}{\gamma_i}d_i(k_i^\top k_t)
-$$
-
-所以：
-
-$$
-d_t=\beta_tv_t
--\beta_t\gamma_tS_0k_t
--\beta_t\sum_{i<t}\frac{\gamma_t}{\gamma_i}d_i(k_i^\top k_t)
-$$
-
-这就是 chunkwise 算法需要 $T/W/U$ 的根本原因：每个 $d_t$ 不只依赖 $v_t$，还依赖之前所有 $d_i$ 和 key 相似度 $k_i^\top k_t$。
-
-在这个例子里，$k_1^\top k_2=0$，两个 key 正交，所以交叉项刚好消失：
-
-$$
-d_1=\beta_1v_1-\beta_1\gamma_1S_0k_1
-$$
-
-$$
-d_2=\beta_2v_2-\beta_2\gamma_2S_0k_2
-$$
-
-这就是后面能直接写：
-
-$$
-D=U-\overleftarrow{W}S_0^\top
-$$
-
-的原因。一般 key 不正交时，$T$ 会把那些交叉项也吸收进去。
-
-### 2.5.4.1 $D$、$W$、$U$ 的关系
-
-论文在 DeltaNet preliminary 里先定义了 $W$ 和 $U$。这两个量容易和这里的 $D$ 混在一起，可以这样区分：
-
-- $W$ 负责表示“擦除方向”，也就是每个 token 怎样从旧 state 里减掉 $Sk$。
-- $U$ 负责表示“写入内容”，也就是每个 token 怎样把 $v$ 写进 state。
-- $D$ 是 effective write，表示“写入内容减去旧 state 擦除项”。
-
-没有 gate 的 DeltaNet 单步公式：
-
-$$
-S_t=S_{t-1}(I-\beta_tk_tk_t^\top)+\beta_tv_tk_t^\top
-$$
-
-也就是：
-
-$$
-S_t=S_{t-1}+\beta_t(v_t-S_{t-1}k_t)k_t^\top
-$$
-
-如果 chunk 内所有 key 都互不影响，那么：
-
-$$
-W=\operatorname{diag}(\beta)K,\quad U=\operatorname{diag}(\beta)V
-$$
-
-这时：
-
-$$
-D=U-WS_0^\top
-$$
-
-因为第 $t$ 行：
-
-$$
-D_t=U_t-W_tS_0^\top=\beta_tv_t^\top-\beta_tk_t^\top S_0^\top
-$$
-
-转成列向量就是：
-
-$$
-d_t=\beta_t(v_t-S_0k_t)
-$$
-
-一般情况下，chunk 内前面的写入会影响后面的擦除，所以 $U,W$ 不能只是 $\operatorname{diag}(\beta)V$ 和 $\operatorname{diag}(\beta)K$，需要用 lower-triangular 的 $T$ 吸收依赖：
-
-$$
-T=\left[I+\operatorname{strictLower}(\operatorname{diag}(\beta)KK^\top)\right]^{-1}\operatorname{diag}(\beta)
-$$
-
-$$
-W=TK,\quad U=TV
-$$
-
-shape 是：
-
-$$
-T\in\mathbb{R}^{C\times C},\quad
-W\in\mathbb{R}^{C\times d_k},\quad
-U\in\mathbb{R}^{C\times d_v}
-$$
-
-Gated DeltaNet 多了 $\alpha$ 衰减，所以要把 $W,Q,K,S$ 按位置乘上 $\gamma$ 或 $\gamma_C/\gamma_i$：
-
-$$
-\overleftarrow{W}_i=\gamma_i W_i
-$$
-
-$$
-\overleftarrow{Q}_r=\gamma_r Q_r
-$$
-
-$$
-\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}K_i
-$$
-
-因此 Gated DeltaNet 里对应的是：
-
-$$
-D=U-\overleftarrow{W}S_0^\top
-$$
-
-$$
-O=\overleftarrow{Q}S_0^\top+((QK^\top)\odot\Gamma)D
-$$
-
-$$
-S_C=\gamma_CS_0+D^\top\overrightarrow{K}
-$$
-
-这里的核心关系就是：
-
-$$
-\boxed{D=U-\overleftarrow{W}S_0^\top}
-$$
-
-$U$ 是准备写入的新内容，$\overleftarrow{W}S_0^\top$ 是从旧 state 里读出来、需要被擦掉的旧内容，两者相减后才是当前 chunk 真正贡献给输出和下一状态的 effective write。
-
-### 2.5.5 state update 为什么是 $D^\top\overrightarrow K$
-
-chunk 末尾状态：
-
-$$
-S_C=\gamma_CS_0+\sum_{i=1}^{C}\frac{\gamma_C}{\gamma_i}d_ik_i^\top
-$$
-
-把所有 $d_i^\top$ 堆成：
-
-$$
-D\in\mathbb{R}^{C\times d_v}
-$$
-
-把所有衰减到 chunk 末尾的 key 堆成：
-
-$$
-\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}k_i^\top
-$$
-
-则：
-
-$$
-D^\top\overrightarrow{K}
-=
-\sum_{i=1}^{C}d_i\left(\frac{\gamma_C}{\gamma_i}k_i^\top\right)
-$$
-
-所以：
-
-$$
-S_C=\gamma_CS_0+D^\top\overrightarrow K
-$$
-
-shape 对齐：
-
-$$
-D^\top\in\mathbb{R}^{d_v\times C},\quad
-\overrightarrow K\in\mathbb{R}^{C\times d_k},\quad
-D^\top\overrightarrow K\in\mathbb{R}^{d_v\times d_k}
-$$
-
-## 3. 把两个 token 组成 chunk
-
-把两个 token 堆成矩阵：
-
-$$
-Q=
-\begin{bmatrix}
-1 & 1 & 0.5\\
-1 & -1 & 2
-\end{bmatrix}
-$$
-
-$$
-K=
-\begin{bmatrix}
-1 & 0 & 0\\
-0 & 1 & 0
-\end{bmatrix}
-$$
-
-$$
-V=
-\begin{bmatrix}
-2 & 1 & 0.5\\
-1 & 3 & -1
-\end{bmatrix}
-$$
-
-shape：
-
-$$
-Q,K,V\in\mathbb{R}^{C\times d}=\mathbb{R}^{2\times 3}
-$$
-
-$$
-S_0\in\mathbb{R}^{d_v\times d_k}=\mathbb{R}^{3\times 3}
-$$
-
-## 4. 衰减 gamma 到底是什么
-
-chunk 内 cumulative decay：
-
-$$
-\gamma_1=\alpha_1=0.5
-$$
-
-$$
-\gamma_2=\alpha_1\alpha_2=0.5\times0.25=0.125
-$$
-
-所以：
-
-$$
-\gamma=
-\begin{bmatrix}
-0.5\\
-0.125
-\end{bmatrix}
-$$
-
-decay-aware causal mask：
-
-$$
-\Gamma_{r,i}=
-\begin{cases}
-\gamma_r/\gamma_i,& r\ge i\\
-0,& r<i
-\end{cases}
-$$
-
-具体是：
-
-$$
-\Gamma=
-\begin{bmatrix}
-1 & 0\\
-0.25 & 1
-\end{bmatrix}
-$$
-
-## 5. 旧 state 的读取：left decay Q
-
-初始 state 对第 $r$ 个输出的贡献要经过 $\gamma_r$：
-
-$$
-\overleftarrow{Q}=
-\begin{bmatrix}
-\gamma_1q_1^\top\\
-\gamma_2q_2^\top
-\end{bmatrix}
-=
-\begin{bmatrix}
-0.5 & 0.5 & 0.25\\
-0.125 & -0.125 & 0.25
-\end{bmatrix}
-$$
-
-旧 state 直接读出来：
-
-$$
-O_{\text{old}}=\overleftarrow{Q}S_0^\top
-=
-\begin{bmatrix}
-0.5 & 0.5 & 0.25\\
-0.125 & -0.125 & 0.25
-\end{bmatrix}
-$$
-
-shape：
-
-$$
-\overleftarrow{Q}S_0^\top:
-[2,3]\times[3,3]\rightarrow[2,3]
-$$
-
-## 6. W、U、D 的数值计算
-
-这个例子里 $k_1,k_2$ 正交，所以 $T$ 不引入额外 lower-triangular 修正，可以直接得到：
-
-$$
-W=
-\begin{bmatrix}
-\beta_1k_1^\top\\
-\beta_2k_2^\top
-\end{bmatrix}
-=
-\begin{bmatrix}
-0.8 & 0 & 0\\
-0 & 0.5 & 0
-\end{bmatrix}
-$$
-
-$$
-U=
-\begin{bmatrix}
-\beta_1v_1^\top\\
-\beta_2v_2^\top
-\end{bmatrix}
-=
-\begin{bmatrix}
-1.6 & 0.8 & 0.4\\
-0.5 & 1.5 & -0.5
-\end{bmatrix}
-$$
-
-擦旧 state 的动作要带上当前位置对应的 decay：
-
-$$
-\overleftarrow{W}=
-\begin{bmatrix}
-\gamma_1 W_1\\
-\gamma_2 W_2
-\end{bmatrix}
-=
-\begin{bmatrix}
-0.4 & 0 & 0\\
-0 & 0.0625 & 0
-\end{bmatrix}
-$$
-
-当前 chunk 的 effective write：
-
-$$
-D=U-\overleftarrow{W}S_0^\top
-$$
-
-因为 $S_0$ 是单位矩阵：
-
-$$
-D=
-\begin{bmatrix}
-1.6 & 0.8 & 0.4\\
-0.5 & 1.5 & -0.5
-\end{bmatrix}
--
-\begin{bmatrix}
-0.4 & 0 & 0\\
-0 & 0.0625 & 0
-\end{bmatrix}
-$$
-
-$$
-=
-\begin{bmatrix}
-1.2 & 0.8 & 0.4\\
-0.5 & 1.4375 & -0.5
-\end{bmatrix}
-$$
-
-shape：
-
-$$
-U:[2,3],\quad
-\overleftarrow{W}S_0^\top:[2,3]\times[3,3]\rightarrow[2,3],\quad
-D:[2,3]
-$$
-
-## 7. chunk 内 attention-like 读取
-
-先算普通 score：
-
-$$
-QK^\top=
-\begin{bmatrix}
-1 & 1\\
-1 & -1
-\end{bmatrix}
-$$
-
-加上 causal 和 decay：
-
-$$
-A=(QK^\top)\odot\Gamma
-=
-\begin{bmatrix}
-1 & 0\\
-0.25 & -1
-\end{bmatrix}
-$$
-
-chunk 内新写入贡献：
-
-$$
-O_{\text{intra}}=AD
-$$
-
-具体：
-
-$$
-O_{\text{intra}}=
-\begin{bmatrix}
-1 & 0\\
-0.25 & -1
-\end{bmatrix}
-\begin{bmatrix}
-1.2 & 0.8 & 0.4\\
-0.5 & 1.4375 & -0.5
-\end{bmatrix}
-$$
-
-$$
-=
-\begin{bmatrix}
-1.2 & 0.8 & 0.4\\
--0.2 & -1.2375 & 0.6
-\end{bmatrix}
-$$
-
-shape：
-
-$$
-A D:[2,2]\times[2,3]\rightarrow[2,3]
-$$
-
-最终输出：
-
-$$
-O=O_{\text{old}}+O_{\text{intra}}
-$$
-
-$$
-O=
-\begin{bmatrix}
-0.5 & 0.5 & 0.25\\
-0.125 & -0.125 & 0.25
-\end{bmatrix}
-+
-\begin{bmatrix}
-1.2 & 0.8 & 0.4\\
--0.2 & -1.2375 & 0.6
-\end{bmatrix}
-$$
-
-$$
-=
-\begin{bmatrix}
-1.7 & 1.3 & 0.65\\
--0.075 & -1.3625 & 0.85
-\end{bmatrix}
-$$
-
-这和单步 recurrent 算出来的 $o_1,o_2$ 完全一致。
-
-## 8. chunk 末尾 state 怎么更新
-
-chunk 结束后，初始 state 本身要衰减到 chunk 末尾：
-
-$$
-\gamma_C S_0=0.125S_0=
-\begin{bmatrix}
-0.125 & 0 & 0\\
-0 & 0.125 & 0\\
-0 & 0 & 0.125
-\end{bmatrix}
-$$
-
-第 $i$ 个 token 的写入传到 chunk 末尾，要乘：
-
-$$
-\gamma_C/\gamma_i
-$$
-
-所以 right-decayed key 是：
-
-$$
-\overrightarrow{K}=
-\begin{bmatrix}
-(\gamma_2/\gamma_1)k_1^\top\\
-(\gamma_2/\gamma_2)k_2^\top
-\end{bmatrix}
-=
-\begin{bmatrix}
-0.25 & 0 & 0\\
-0 & 1 & 0
-\end{bmatrix}
-$$
-
-state update：
-
-$$
-S_{\text{next}}=\gamma_CS_0+D^\top\overrightarrow{K}
-$$
-
-先算：
-
-$$
-D^\top=
-\begin{bmatrix}
-1.2 & 0.5\\
-0.8 & 1.4375\\
-0.4 & -0.5
-\end{bmatrix}
-$$
-
-$$
-D^\top\overrightarrow{K}
-=
-\begin{bmatrix}
-1.2 & 0.5\\
-0.8 & 1.4375\\
-0.4 & -0.5
-\end{bmatrix}
-\begin{bmatrix}
-0.25 & 0 & 0\\
-0 & 1 & 0
-\end{bmatrix}
-$$
-
-$$
-=
-\begin{bmatrix}
-0.3 & 0.5 & 0\\
-0.2 & 1.4375 & 0\\
-0.1 & -0.5 & 0
-\end{bmatrix}
-$$
-
-因此：
-
-$$
-S_{\text{next}}=
-\begin{bmatrix}
-0.125 & 0 & 0\\
-0 & 0.125 & 0\\
-0 & 0 & 0.125
-\end{bmatrix}
-+
-\begin{bmatrix}
-0.3 & 0.5 & 0\\
-0.2 & 1.4375 & 0\\
-0.1 & -0.5 & 0
-\end{bmatrix}
-$$
-
-$$
-=
-\begin{bmatrix}
-0.425 & 0.5 & 0\\
-0.2 & 1.5625 & 0\\
-0.1 & -0.5 & 0.125
-\end{bmatrix}
-$$
-
-这也和单步递推的 $S_2$ 完全一致。
-
-shape：
-
-$$
-D^\top\overrightarrow K:
-[3,2]\times[2,3]\rightarrow[3,3]
-$$
-
-这里最能看出为什么用 $C=2,d=3$ 更清楚：state update 里的中间维度是 chunk size $C=2$，输出矩阵维度是 $d_v\times d_k=3\times3$。
-
-## 9. 把这个例子翻译成 kernel 流程
-
-对一个 chunk，kernel 里的数据 shape 是：
-
-```text
-Q:      [C, Dk] = [2, 3]
-K:      [C, Dk] = [2, 3]
-V:      [C, Dv] = [2, 3]
-S:      [Dv,Dk] = [3, 3]
-alpha:  [C]     = [2]
-beta:   [C]     = [2]
-O:      [C, Dv] = [2, 3]
-S_next: [Dv,Dk] = [3, 3]
-```
-
-完整流程：
-
-```text
-1. gamma = cumulative_product(alpha)
-
-2. Q_left[r] = gamma[r] * Q[r]
-
-3. Gamma[r, i] = gamma[r] / gamma[i], only for r >= i
-
-4. 计算 W 和 U
-   简单正交例子里：
-   W = diag(beta) @ K
-   U = diag(beta) @ V
-
-   一般情况里：
-   T = inverse_lower(I + strict_lower(diag(beta) * (Gamma ⊙ K K^T))) * diag(beta)
-   W = T @ K
-   U = T @ V
-
-5. W_left[r] = gamma[r] * W[r]
-
-6. D = U - W_left @ S.T
-
-7. A = causal((Q @ K.T) ⊙ Gamma)
-
-8. O = Q_left @ S.T + A @ D
-
-9. K_right[i] = gamma[C] / gamma[i] * K[i]
-
-10. S_next = gamma[C] * S + D.T @ K_right
-```
-
-最重要的 shape 对齐：
-
-```text
-Q_left @ S.T:
-  [2,3] @ [3,3] -> [2,3]
-
-W_left @ S.T:
-  [2,3] @ [3,3] -> [2,3]
-
-A @ D:
-  [2,2] @ [2,3] -> [2,3]
-
-D.T @ K_right:
-  [3,2] @ [2,3] -> [3,3]
-```
-
-## 10. 为什么论文里要用箭头
-
-箭头只是为了说明“这个张量已经被衰减到哪个位置”。
-
-可以这样记：
-
-$$
-\overleftarrow{Q}_r=\gamma_rQ_r
-$$
-
-这是从 chunk 开头的 state 衰减到第 $r$ 个 query。
-
-$$
-\overleftarrow{W}_r=\gamma_rW_r
-$$
-
-这是旧 state 被第 $r$ 个 token 擦除时需要带上的衰减。
-
-$$
-\overrightarrow{K}_i=\frac{\gamma_C}{\gamma_i}K_i
-$$
-
-这是第 $i$ 个 token 写入后继续传到 chunk 末尾的衰减。
-
-$$
-\Gamma_{r,i}=\frac{\gamma_r}{\gamma_i}
-$$
-
-这是第 $i$ 个 token 的写入影响第 $r$ 个 query 时经历的衰减。
-
-所以，衰减并没有改变核心结构。它只是把 token 间的 $\alpha$ 累乘提前塞进 $Q,W,K$ 和 score mask 里，让 chunk 内还能写成矩阵乘法。
-
-## 11. 写 kernel 时的最小实现建议
-
-先写这个顺序，不要一开始追求融合：
-
-```text
-Kernel / function 1:
-  计算 gamma 和 Gamma
-
-Kernel / function 2:
-  计算 KKT = K @ K.T
-  计算 T
-  计算 W = T @ K
-  计算 U = T @ V
-
-Kernel / function 3:
-  计算 D = U - W_left @ S.T
-  计算 O = Q_left @ S.T + A @ D
-  计算 S_next = gamma_C * S + D.T @ K_right
-```
-
-等 reference 对齐后再融合：
-
-- 不要 materialize `Q_left`，load `Q` 时乘 `gamma[r]`。
-- 不要 materialize `K_right`，load `K` 时乘 `gamma_C / gamma[i]`。
-- `Gamma` 如果 chunk 很小，可以放 shared memory。
-- `T` 是 $C\times C$ lower triangular，小 chunk 时适合放 shared memory。
-- `D.T @ K_right` 是 state update 的核心 GEMM-like 部分，后续优化重点在这里。
-
-这个例子可以作为 kernel 单元测试。输入上面的数字，chunkwise kernel 应该输出：
-
-$$
-O=
-\begin{bmatrix}
-1.7 & 1.3 & 0.65\\
--0.075 & -1.3625 & 0.85
-\end{bmatrix}
-$$
-
-$$
-S_{\text{next}}=
-\begin{bmatrix}
-0.425 & 0.5 & 0\\
-0.2 & 1.5625 & 0\\
-0.1 & -0.5 & 0.125
-\end{bmatrix}
-$$
