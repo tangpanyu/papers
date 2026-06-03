@@ -634,6 +634,26 @@ $$
 
 直觉是：chunk 内第 $i$ 个 token 的写入影响第 $r$ 个 token 时，中间会经历相对衰减 $\gamma_r/\gamma_i$。所以这个 decay ratio 出现在 $U_g$ 的 lower-triangular solve 里。
 
+这里也是 $U_g$ 和 $W$ 看起来不对称的地方。$U_g$ 处理的是 chunk 内已经发生的写入：第 $i$ 个 token 的写入 $d_i$ 影响第 $r$ 个 token 时，起点是 token $i$，终点是 token $r$，所以需要相对衰减：
+
+$$
+\gamma_r/\gamma_i
+$$
+
+而 $W$ 负责从 chunk 开头传入的旧 state $S_0$ 里擦掉内容。$S_0$ 可以看成来自虚拟位置 $0$，并约定：
+
+$$
+\gamma_0=1
+$$
+
+所以旧 state 到第 $r$ 个 token 的衰减是：
+
+$$
+\gamma_r/\gamma_0=\gamma_r
+$$
+
+它只和当前行 $r$ 有关，可以在算完 $W$ 后按行整体乘上 $\gamma_r$。因此 $W$ 的 lower-triangular solve 里不需要再点乘 $\Gamma$；这一路的 decay 放在后面的 $\overleftarrow W=\gamma W$ 里。
+
 擦旧 state 的 $W$ 仍然先按普通 DeltaNet 的方式得到，然后再按当前位置乘上从 chunk 开头到当前位置的 absolute decay：
 
 $$
