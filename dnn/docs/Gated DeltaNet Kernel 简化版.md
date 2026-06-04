@@ -15,6 +15,40 @@ V,D,O: [C, dv]
 o_t = q_t^T S_t
 ```
 
+统一记号和 shape：
+
+```text
+B:  batch size
+H:  num heads
+T:  sequence length
+C:  chunk size，也就是代码里的 BT
+N:  number of chunks, N = T / C
+
+dk: key/query head dimension
+dv: value head dimension
+```
+
+去掉 batch/head 维度，只看一个 chunk 时：
+
+```text
+Q, K:                  [C, dk]
+V, U_g, D, O:           [C, dv]
+W, W_left, K_right:     [C, dk]
+S0, S, S_next:          [dk, dv]
+alpha, beta, gamma:     [C]
+Gamma:                  [C, C]
+A_u, A_w, KKT:          [C, C]
+```
+
+带回完整 batch/head 维度时，代码里的主张量通常是：
+
+```text
+q, k:      [B, H, T, dk]
+v, output: [B, H, T, dv]
+beta, g:   [B, H, T]
+state:     [B, H, dk, dv]
+```
+
 ## 1. 单步语义
 
 Gated DeltaNet 的单步更新可以理解成：
@@ -41,6 +75,17 @@ $$
 $$
 o_t=q_t^\top S_t
 $$
+
+单步 shape：
+
+```text
+alpha_t, beta_t: scalar
+q_t, k_t:         [dk]
+v_t, d_t, o_t:    [dv]
+S_{t-1}, S_bar_t, S_t: [dk, dv]
+S_bar_t.T @ k_t:  [dv]
+k_t @ d_t.T:      [dk, dv]
+```
 
 等价展开：
 
@@ -91,6 +136,14 @@ gamma_r:      从 chunk 开头到 token r 的 absolute decay
 Gamma_{r,i}:  从 token i 的写入到 token r 的 relative decay
 ```
 
+这一节的 shape：
+
+```text
+alpha:  [C]
+gamma:  [C]
+Gamma:  [C, C]
+```
+
 ## 3. Chunkwise 主公式
 
 chunkwise 计算可以写成：
@@ -107,6 +160,22 @@ $$
 S_C=\gamma_C S_0+\overrightarrow K^\top D
 $$
 
+其中各量 shape 是：
+
+```text
+U_g:              [C, dv]
+W_left:           [C, dk]
+D:                [C, dv]
+Q_left:           [C, dk]
+K_right:          [C, dk]
+S0:               [dk, dv]
+S_C:              [dk, dv]
+QK.T:             [C, C]
+Gamma:            [C, C]
+(QK.T) * Gamma:   [C, C]
+gamma_C:          scalar
+```
+
 其中：
 
 $$
@@ -121,13 +190,17 @@ $$
 \overrightarrow K_i=\frac{\gamma_C}{\gamma_i}K_i
 $$
 
-shape 是：
+主公式 shape 对齐：
 
 ```text
-D:                    [C, dv]
-Q_left @ S0:           [C, dk] @ [dk, dv] -> [C, dv]
-((QK^T) * Gamma) @ D:  [C, C]  @ [C, dv]  -> [C, dv]
-K_right.T @ D:         [dk, C] @ [C, dv]  -> [dk, dv]
+D = U_g - W_left @ S0:
+  [C,dv] = [C,dv] - [C,dk] @ [dk,dv]
+
+O = Q_left @ S0 + ((QK.T) * Gamma) @ D:
+  [C,dv] = [C,dk] @ [dk,dv] + [C,C] @ [C,dv]
+
+S_C = gamma_C * S0 + K_right.T @ D:
+  [dk,dv] = scalar * [dk,dv] + [dk,C] @ [C,dv]
 ```
 
 ## 4. W 和 U_g 为什么不一样
@@ -143,9 +216,25 @@ I+\operatorname{strictLower}\left(
 \right]^{-1}
 $$
 
+这里：
+
+```text
+diag(beta):              [C, C]
+K K.T:                   [C, C]
+diag(beta) @ (K K.T):    [C, C]
+A_w:                     [C, C]
+```
+
 $$
 W=A_w\operatorname{diag}(\beta)K
 $$
+
+shape：
+
+```text
+beta * K 等价于 diag(beta) @ K: [C, dk]
+W = A_w @ (beta * K):           [C, C] @ [C, dk] -> [C, dk]
+```
 
 Gated DeltaNet 多了 decay，所以写入侧变成 decay-aware 的 $U_g$：
 
@@ -158,9 +247,26 @@ I+\operatorname{strictLower}\left(
 \right]^{-1}
 $$
 
+这里：
+
+```text
+Gamma:                         [C, C]
+K K.T:                         [C, C]
+Gamma * (K K.T):               [C, C]
+diag(beta) @ (Gamma * K K.T):  [C, C]
+A_u:                           [C, C]
+```
+
 $$
 U_g=A_u\operatorname{diag}(\beta)V
 $$
+
+shape：
+
+```text
+beta * V 等价于 diag(beta) @ V: [C, dv]
+U_g = A_u @ (beta * V):         [C, C] @ [C, dv] -> [C, dv]
+```
 
 关键区别：
 
@@ -203,6 +309,20 @@ chunk_fwd_h_fn:
 ```
 
 ## 5. C=2,d=3 数值例子
+
+本节具体取：
+
+```text
+C = 2
+dk = 3
+dv = 3
+Q, K: [2, 3]
+V, U_g, D, O: [2, 3]
+W, W_left, K_right: [2, 3]
+S0, S_next: [3, 3]
+alpha, beta, gamma: [2]
+Gamma, A_u, A_w: [2, 2]
+```
 
 取：
 
@@ -368,19 +488,48 @@ $$
 
 ```text
 1. 读 Q,K,V,beta,alpha
+   Q,K: [C,dk], V: [C,dv], beta/alpha: [C]
+
 2. 计算 gamma = cumulative_prod(alpha)
+   gamma: [C]
+
 3. 构造 Gamma_{r,i} = gamma_r / gamma_i, r >= i
+   Gamma: [C,C]
+
 4. 计算 KKT = K @ K.T
+   KKT: [C,dk] @ [dk,C] -> [C,C]
+
 5. 计算 A_u = inverse_lower(I + strict_lower(diag(beta) @ (Gamma * KKT)))
+   A_u: [C,C]
+
 6. 计算 U_g = A_u @ (beta * V)
+   beta * V: [C,dv]
+   U_g: [C,C] @ [C,dv] -> [C,dv]
+
 7. 计算 A_w = inverse_lower(I + strict_lower(diag(beta) @ KKT))
+   A_w: [C,C]
+
 8. 计算 W = A_w @ (beta * K)
+   beta * K: [C,dk]
+   W: [C,C] @ [C,dk] -> [C,dk]
+
 9. 计算 Q_left = gamma * Q
+   Q_left: [C,dk]
+
 10. 计算 W_left = gamma * W
+    W_left: [C,dk]
+
 11. 计算 D = U_g - W_left @ S
+    D: [C,dv] - [C,dk] @ [dk,dv] -> [C,dv]
+
 12. 计算 O = Q_left @ S + ((Q @ K.T) * Gamma) @ D
+    O: [C,dv]
+
 13. 计算 K_right = (gamma_C / gamma) * K
+    K_right: [C,dk]
+
 14. 计算 S_next = gamma_C * S + K_right.T @ D
+    S_next: [dk,dv]
 ```
 
 实现注意：
