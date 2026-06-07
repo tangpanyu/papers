@@ -6,7 +6,20 @@
 单步 recurrent 语义 -> channel-wise decay -> chunkwise W/U/D -> 输出 -> state update -> kernel checklist
 ```
 
-本文沿用论文和前面 Gated DeltaNet 手算例子的 state 方向：
+阅读前提：这篇不假设你已经懂 Gated DeltaNet。只要先把 KDA 当成一个
+“会衰减、会擦除、会写入”的 recurrent state 来看：
+
+```text
+S:      固定大小的记忆表，行是 key/channel 维度，列是 value 维度
+alpha:  每个 key/channel 自己的旧记忆保留比例
+beta:   当前 token 的写入/擦除强度
+k, v:   往 state 里写什么、写到哪个 key 方向
+q:      从 state 里按哪个 key 方向读
+```
+
+后面提到 GDN 的地方都只是可选对照，不是理解本文的前置条件。
+
+本文使用下面的 state 方向：
 
 $$
 S_t\in\mathbb{R}^{d_k\times d_v},\quad
@@ -84,7 +97,13 @@ S = S_decay + k[:, None] @ d[None, :]
 o = S.T @ q
 ```
 
-和 Gated DeltaNet 的区别只有一个核心点：GDN 的 $\alpha_t$ 是 scalar，KDA 的 $\alpha_t$ 是 $[d_k]$，所以 decay 发生在 state 的 key/channel 维度上。
+不用先想 GDN。KDA 在这里最重要的点是：$\alpha_t$ 不是一个全局系数，而是长度为 $d_k$ 的向量。
+
+$$
+S_{\text{decay}}[c,:]=\alpha_t[c]\cdot S_{t-1}[c,:]
+$$
+
+也就是说，state 的每一行，也就是每个 key/channel，都可以有自己的衰减速度。某些 channel 可以快速忘掉旧信息，某些 channel 可以把旧信息留得更久。可选对照：如果某个模型的 $\alpha_t$ 是 scalar，那所有 channel 会被同一个比例一起衰减；KDA 的 channel-wise decay 更细。
 
 ## 2. Log Decay
 
@@ -116,7 +135,14 @@ $$
 \rho_{r,i}=\exp(g_r-g_i)\in\mathbb{R}^{d_k}
 $$
 
-这就是 KDA shape 变化的来源：GDN 里 $\rho_{r,i}$ 是 scalar，KDA 里 $\rho_{r,i}$ 是 $[d_k]$，不能再直接写成一个普通 $[C,C]$ mask 去乘 $QK^\top$ 或 $KK^\top$。
+这里的 $\rho_{r,i}$ 也不需要借助 GDN 来理解。它回答的是：
+
+```text
+第 i 个 token 写进去的内容，传到第 r 个 token 时，
+在每个 key/channel 上分别还剩多少？
+```
+
+因为答案是每个 channel 一个数，所以 $\rho_{r,i}\in\mathbb{R}^{d_k}$。这会直接影响后面的 shape：token 对 token 的相互作用最后仍然会汇总成一个 scalar，例如 $B_{r,i}$ 或 $E_{r,i}$，但汇总前必须先在 $d_k$ 维度上乘上 channel-wise decay。它不能只靠一个普通 $[C,C]$ 的时间 mask 去乘 $QK^\top$ 或 $KK^\top$ 表达出来。
 
 ## 3. Chunkwise W/U/D
 
