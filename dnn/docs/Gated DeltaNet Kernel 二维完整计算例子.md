@@ -1461,22 +1461,24 @@ KDA 的 chunk 输入：
 Q:     [C, dk]
 K:     [C, dk]
 V:     [C, dv]
-G:     [C, dk]    # log cumulative decay, 或者 cumulative gamma
+g_raw: [C, dk]    # 每个 token 的 log alpha
+g:     [C, dk]    # g = cumsum(g_raw, dim=0)，cumulative log decay
+gamma: [C, dk]    # gamma = exp(g)
 beta:  [C]
 S:     [dk, dv]
 O:     [C, dv]
 ```
 
-技术报告的 PyTorch-style pseudocode 里用 `g = g.cumsum(-2)`，所以实际 kernel 常常存的是 log decay：
+技术报告 Appendix C 的 PyTorch-style pseudocode 里用 `g = g.cumsum(-2)`。因此输入的 `g` 更准确地说是 per-token log decay，做完 cumsum 后才是 cumulative log decay：
 
 $$
-g_r=\sum_{j=1}^{r}\log \alpha_j
+g_r=\sum_{j=1}^{r}\log \alpha_j\in\mathbb{R}^{d_k}
 $$
 
 于是区间 decay 用：
 
 $$
-\exp(g_r-g_i)
+\rho_{r,i}=\exp(g_r-g_i)\in\mathbb{R}^{d_k}
 $$
 
 这比直接存 $\gamma_r/\gamma_i$ 更稳。
@@ -1494,40 +1496,72 @@ D: effective pseudo-value = U - W @ S
 技术报告里的核心形式可以理解成：
 
 $$
-W=M(\Gamma^{1\to C}\odot K)
+W=M(\gamma\odot K)
 $$
 
 $$
 U=MV
 $$
 
-其中 $M$ 是 lower-triangular solve 得到的矩阵，类似 GDN/DeltaNet 里的 $T$：
+其中 $\gamma=\exp(g)\in\mathbb{R}^{C\times d_k}$。$M$ 是 lower-triangular solve 得到的矩阵，类似 GDN/DeltaNet 里的 $T$，但 KDA 的相似度不能写成简单的 scalar mask $\Gamma\odot KK^\top$。先定义：
+
+$$
+B_{r,i}
+=
+k_r^\top\operatorname{Diag}(\rho_{r,i})k_i
+=
+\sum_{c=1}^{d_k}k_{r,c}\rho_{r,i,c}k_{i,c}
+\in\mathbb{R}
+$$
+
+也可以写成论文 Eq. 6 的矩阵形式：
+
+$$
+B=(\gamma\odot K)\left(\frac{K}{\gamma}\right)^\top
+\in\mathbb{R}^{C\times C}
+$$
+
+然后：
 
 $$
 M=
 \left[
 I+\operatorname{StrictTril}\left(
-\operatorname{Diag}(\beta)
-\left(
-\Gamma\odot KK^\top
-\right)
+\operatorname{Diag}(\beta)B
 \right)
 \right]^{-1}
 \operatorname{Diag}(\beta)
+\in\mathbb{R}^{C\times C}
 $$
 
 不用被 inverse 吓到：实现不是求通用逆矩阵，而是 unit lower-triangular forward substitution。
 
+shape 是：
+
+$$
+\gamma\odot K:[C,d_k],\quad
+\frac{K}{\gamma}:[C,d_k],\quad
+B:[C,C]
+$$
+
+$$
+W=M(\gamma\odot K):[C,C]\times[C,d_k]\to[C,d_k]
+$$
+
+$$
+U=MV:[C,C]\times[C,d_v]\to[C,d_v]
+$$
+
 KDA 的 effective pseudo-value：
 
 $$
-D=U-WS
+D=U-WS_0
 $$
 
 注意这里的 shape 是：
 
 $$
-W S:[C,d_k]\times[d_k,d_v]\rightarrow[C,d_v]
+WS_0:[C,d_k]\times[d_k,d_v]\rightarrow[C,d_v]
 $$
 
 前面 GDN 手算例子也使用同一个方向，所以对应写成：
@@ -1547,7 +1581,7 @@ $$
 inter-chunk 部分：读 chunk 开始前的 state。
 
 $$
-O_{\text{inter}}=(\Gamma^{1\to C}\odot Q)S
+O_{\text{inter}}=(\gamma\odot Q)S_0
 $$
 
 shape：
@@ -1559,12 +1593,28 @@ $$
 intra-chunk 部分：读当前 chunk 内已经写入的 pseudo-value。
 
 $$
-O_{\text{intra}}
-=
-\operatorname{Tril}
-\left(
-(\Gamma\odot Q)K^\top
-\right)D
+E_{r,i}=
+\begin{cases}
+q_r^\top\operatorname{Diag}(\rho_{r,i})k_i,&r\ge i\\
+0,&r<i
+\end{cases}
+$$
+
+等价于论文 Eq. 9 里的：
+
+$$
+E=
+\operatorname{Tril}\left(
+(\gamma\odot Q)
+\left(\frac{K}{\gamma}\right)^\top
+\right)
+\in\mathbb{R}^{C\times C}
+$$
+
+于是：
+
+$$
+O_{\text{intra}}=ED
 $$
 
 shape：
@@ -1585,26 +1635,30 @@ $$
 O=\overleftarrow{Q}S_0+((QK^\top)\odot\Gamma)D
 $$
 
-是同一个 mental model，只是 KDA 的 $\Gamma$ 是 channel-wise 的，不再是简单 scalar mask。
+是同一个 mental model，只是 KDA 的 $\rho_{r,i}$ 是 channel-wise 向量，不再是可以直接乘在 $QK^\top$ 上的 scalar mask。
 
 ### 12.8 KDA 的 state update
 
 chunk 结束后，state 先整体按最后位置的 channel-wise decay 衰减：
 
 $$
-S\leftarrow \operatorname{Diag}(\gamma_C)S
+S\leftarrow \operatorname{Diag}(\gamma_C)S_0
 $$
 
 然后加上当前 chunk 写入：
 
 $$
-S\leftarrow S+(\Gamma^{i\to C}\odot K)^\top D
+S_{\text{next}}
+=
+\operatorname{Diag}(\gamma_C)S_0
++
+(\rho_{C,i}\odot K)^\top D
 $$
 
 shape：
 
 $$
-(\Gamma^{i\to C}\odot K)^\top:
+(\rho_{C,i}\odot K)^\top:
 [d_k,C]
 $$
 
@@ -1635,15 +1689,17 @@ $$
 通用 DPLR 可以写成类似：
 
 $$
-S_t=(D_t-a_tb_t^\top)S_{t-1}+k_tv_t^\top
+S_t=(D_t-a_tb_t^\top)S_{t-1}+\beta_tk_tv_t^\top
 $$
 
 它表达力强，但 chunkwise 时会出现更多 decay ratio 和更多二级矩阵乘法，尤其 fine-grained decay 下容易有数值稳定问题，需要 secondary chunking。
 
-KDA 的关键约束是把 DPLR 里的低秩方向绑定到 key 上，近似理解成：
+KDA 的关键约束是把 DPLR 里的低秩方向绑定到 key 上。和论文 §6.2 对齐，更精确的对应关系是：
 
 ```text
-a_t = b_t = k_t
+D_t = Diag(alpha_t)
+a_t = beta_t * k_t
+b_t = k_t ⊙ alpha_t
 ```
 
 这样它仍然保留 delta rule 的 Householder-style 擦写结构，但减少了通用 DPLR 的额外计算。
@@ -1761,7 +1817,15 @@ $$
 
 ```text
 KDA score:
-  A[r, i] = dot(q[r] * exp(g[r] - g[i]), k[i])
+  A[r, i] = dot(q[r] * exp(g[r] - g[i]), k[i]), r >= i
+
+KDA lower-triangular solve:
+  B[r, i] = dot(k[r] * exp(g[r] - g[i]), k[i])
+  M = inv_lower(I + strict_lower(diag(beta) @ B)) @ diag(beta)
+
+compact WY/UT terms:
+  W = M @ (exp(g) * K)
+  U = M @ V
 
 pseudo-value:
   D = U - W @ S

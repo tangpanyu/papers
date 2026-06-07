@@ -1,7 +1,7 @@
 # Kimi Linear: An Expressive, Efficient Attention Architecture
 
 论文：Kimi Team，Technical Report，2025  
-PDF：[tech_report.pdf](/home/tangpanyu/reps/papers/dnn/pdfs/tech_report.pdf)
+PDF：[Team et al. - 2025 - Kimi Linear An Expressive, Efficient Attention Architecture.pdf](/home/tpy/reps/papers/dnn/pdfs/Team%20et%20al.%20-%202025%20-%20Kimi%20Linear%20An%20Expressive,%20Efficient%20Attention%20Architecture.pdf)
 
 ## 论文一句话总结
 
@@ -217,6 +217,7 @@ def kda_step(q, k, v, alpha, beta, S):
 
 - $Q_{[t]},K_{[t]}\in\mathbb{R}^{C\times d_k}$
 - $V_{[t]}\in\mathbb{R}^{C\times d_v}$
+- $\gamma_{[t]}^{1\to C}\in\mathbb{R}^{C\times d_k}$，每行是从 chunk 开头到当前位置的 cumulative channel-wise decay
 - 初始 state $S^0_{[t]}\in\mathbb{R}^{d_k\times d_v}$
 
 论文把 chunk 内第 $r$ 步后的 state 写成：
@@ -232,9 +233,11 @@ chunk 级 state update 的核心形式：
 $$
 S_{[t+1]}
 =\operatorname{Diag}(\gamma^C_{[t]})S_{[t]}
-+\left(\Gamma^{1\to C}_{[t]}\odot K_{[t]}\right)^\top
++\left(\Gamma^{i\to C}_{[t]}\odot K_{[t]}\right)^\top
 \left(U_{[t]}-W_{[t]}S_{[t]}\right)
 $$
+
+其中 $\Gamma^{i\to C}_{[t]}\in\mathbb{R}^{C\times d_k}$ 的第 $i$ 行是 $\gamma^C_{[t]}/\gamma^i_{[t]}$，也就是第 $i$ 个 token 的写入传到 chunk 末尾的 channel-wise 衰减。这里不能把 $\Gamma$ 当成普通 $C\times C$ scalar mask。
 
 chunk 输出分成两部分：
 
@@ -250,6 +253,15 @@ O_{[t]}
 \end{aligned}
 $$
 
+这里 $\Gamma^{1\to C}_{[t]}$ 表示 $\gamma_{[t]}$ 的 $C\times d_k$ stack。输出里的 intra-chunk score 等价于：
+
+$$
+E_{r,i}
+=q_r^\top\operatorname{Diag}(\exp(g_r-g_i))k_i,\quad r\ge i
+$$
+
+所以它是“按 channel 缩放后再点积”，不是先算 $QK^\top$ 再乘一个 scalar decay mask。
+
 形象解释：decode 是逐条记账；prefill 是拿 64 条流水一起结算。chunk 内先算出这 64 条记录之间谁影响谁，再一次性更新跨 chunk 的总账 $S$。
 
 小例子：假设 chunk size $C=4$。第 2 个 token 只能看第 1、2 个 token，第 4 个 token 可以看第 1 到 4 个 token。这就是一个 $4\times4$ lower-triangular interaction matrix。KDA 先在 chunk 内构造这个因果矩阵，再用矩阵乘法得到 4 个输出和下一个 chunk 的 state。
@@ -263,10 +275,10 @@ def chunk_kda(q, k, v, log_decay, beta, init_state, C=64):
     q, k, v, g, beta = rearrange_to_chunks(q, k, v, log_decay, beta, C)
     g = g.cumsum(dim=-2)
 
-    A_kk = build_lower_triangular_k_interactions(k, g, beta)  # [B,H,N,C,C]
-    A = triangular_inverse_by_forward_substitution(A_kk)
-    W = A @ (g.exp() * k)                                    # [B,H,N,C,Dk]
-    U = A @ v                                                # [B,H,N,C,Dv]
+    B_kk = build_k_interactions(k, g)                         # [B,H,N,C,C]
+    M = lower_triangular_solve_with_beta(B_kk, beta)           # [B,H,N,C,C]
+    W = M @ (g.exp() * k)                                     # [B,H,N,C,Dk]
+    U = M @ v                                                 # [B,H,N,C,Dv]
 
     S = init_state                                           # [B,H,Dk,Dv]
     outs = []
@@ -296,6 +308,8 @@ def chunk_kda(q, k, v, log_decay, beta, init_state, C=64):
 $$
 S_t=(D-a_tb_t^\top)S_{t-1}+k_tv_t^\top
 $$
+
+论文 §6.2 的通用 DPLR 写法把写入项写成 $k_tv_t^\top$；和 KDA Eq. 1 对齐时，可以把这里的写入方向理解成已经吸收了 $\beta_t$。
 
 KDA 是受约束的 DPLR：
 
