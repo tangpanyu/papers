@@ -1,64 +1,56 @@
 # Gated DeltaNet Kernel 简化版
 
-这份简化版只保留实现 chunkwise Gated DeltaNet kernel 需要的主线：
+这份笔记只保留实现 chunkwise Gated DeltaNet kernel 需要的主线：
 
 ```text
-单步语义 -> chunkwise 公式 -> W/U_g/D 的区别 -> 一个 C=2,d=3 数值例子 -> kernel checklist
+单步语义 -> chunkwise 公式 -> W/U_g/D 的区别 -> C=2,d=3 数值例子 -> kernel checklist
 ```
 
-本文沿用当前代码里的 state 方向：
+本文省略 batch/head 维度，只看一个 chunk。令
 
-```text
-S: [dk, dv]
-Q,K: [C, dk]
-V,D,O: [C, dv]
-o_t = q_t^T S_t
-```
+$$
+Q,K,W,\overleftarrow W,\overrightarrow K\in\mathbb{R}^{C\times d_k}
+$$
 
-统一记号和 shape：
+$$
+V,U_g,D,O\in\mathbb{R}^{C\times d_v}
+$$
 
-```text
-B:  batch size
-H:  num heads
-T:  sequence length
-C:  chunk size，也就是代码里的 BT
-N:  number of chunks, N = T / C
+$$
+S_0,S_C\in\mathbb{R}^{d_k\times d_v}
+$$
 
-dk: key/query head dimension
-dv: value head dimension
-```
+$$
+\alpha,\beta,\gamma\in\mathbb{R}^{C},\qquad
+\Gamma,A_u,A_w\in\mathbb{R}^{C\times C}
+$$
 
-去掉 batch/head 维度，只看一个 chunk 时：
+代码里的完整张量只是多了 batch/head 维：
 
-```text
-Q, K:                  [C, dk]
-V, U_g, D, O:           [C, dv]
-W, W_left, K_right:     [C, dk]
-S0, S, S_next:          [dk, dv]
-alpha, beta, gamma:     [C]
-Gamma:                  [C, C]
-A_u, A_w, KKT:          [C, C]
-```
+$$
+q,k\in\mathbb{R}^{B\times H\times T\times d_k},\quad
+v,o\in\mathbb{R}^{B\times H\times T\times d_v},\quad
+S\in\mathbb{R}^{B\times H\times d_k\times d_v}
+$$
 
-带回完整 batch/head 维度时，代码里的主张量通常是：
+state 方向固定为：
 
-```text
-q, k:      [B, H, T, dk]
-v, output: [B, H, T, dv]
-beta, g:   [B, H, T]
-state:     [B, H, dk, dv]
-```
+$$
+S_t\in\mathbb{R}^{d_k\times d_v},\qquad
+o_t=S_t^\top q_t\in\mathbb{R}^{d_v}
+$$
 
 ## 1. 单步语义
 
-Gated DeltaNet 的单步更新可以理解成：
+对一个 token，
 
-```text
-先 decay 旧 state
-再用 delta rule 擦除旧内容并写入新 value
-```
+$$
+q_t,k_t\in\mathbb{R}^{d_k},\quad
+v_t,d_t,o_t\in\mathbb{R}^{d_v},\quad
+\alpha_t,\beta_t\in\mathbb{R}
+$$
 
-公式是：
+Gated DeltaNet 可以理解成先 decay 旧 state，再用 delta rule 擦写：
 
 $$
 \bar S_t=\alpha_t S_{t-1}
@@ -73,19 +65,8 @@ S_t=\bar S_t+k_td_t^\top
 $$
 
 $$
-o_t=q_t^\top S_t
+o_t=S_t^\top q_t
 $$
-
-单步 shape：
-
-```text
-alpha_t, beta_t: scalar
-q_t, k_t:         [dk]
-v_t, d_t, o_t:    [dv]
-S_{t-1}, S_bar_t, S_t: [dk, dv]
-S_bar_t.T @ k_t:  [dv]
-k_t @ d_t.T:      [dk, dv]
-```
 
 等价展开：
 
@@ -99,27 +80,24 @@ $$
 
 也就是：
 
-```text
-state decay:  alpha_t S_{t-1}
-erase:       -beta_t k_t k_t^T alpha_t S_{t-1}
-write:       beta_t k_t v_t^T
-```
+$$
+\underbrace{\alpha_tS_{t-1}}_{\text{decay}}
+\quad
+\underbrace{-\beta_tk_tk_t^\top(\alpha_tS_{t-1})}_{\text{erase}}
+\quad
+\underbrace{+\beta_tk_tv_t^\top}_{\text{write}}
+$$
 
 ## 2. Chunk 内 decay
 
-对一个 chunk，定义 cumulative decay：
+对一个长度为 $C$ 的 chunk，定义 cumulative decay：
 
 $$
+\gamma_0=1,\qquad
 \gamma_r=\prod_{j=1}^{r}\alpha_j
 $$
 
-并约定：
-
-$$
-\gamma_0=1
-$$
-
-chunk 内第 $i$ 个 token 的写入传到第 $r$ 个 token，需要相对衰减：
+第 $i$ 个 token 的写入传到第 $r$ 个 token 时，需要相对衰减：
 
 $$
 \Gamma_{r,i}=
@@ -129,83 +107,99 @@ $$
 \end{cases}
 $$
 
-所以：
+直觉：
 
-```text
-gamma_r:      从 chunk 开头到 token r 的 absolute decay
-Gamma_{r,i}:  从 token i 的写入到 token r 的 relative decay
-```
+$$
+\gamma_r:\text{ chunk 起点到 }r\text{ 的 decay}
+$$
 
-这一节的 shape：
-
-```text
-alpha:  [C]
-gamma:  [C]
-Gamma:  [C, C]
-```
+$$
+\Gamma_{r,i}:\text{ token }i\text{ 的写入传到 }r\text{ 的 decay}
+$$
 
 ## 3. Chunkwise 主公式
 
-chunkwise 计算可以写成：
+先定义三组 decay 后的矩阵：
 
 $$
+\overleftarrow Q=\operatorname{diag}(\gamma)Q
+$$
+
+$$
+\overleftarrow W=\operatorname{diag}(\gamma)W
+$$
+
+$$
+\overrightarrow K=\operatorname{diag}(\gamma_C/\gamma)K
+$$
+
+这里 $\gamma_C/\gamma$ 表示逐元素除法：
+
+$$
+(\gamma_C/\gamma)_i=\gamma_C/\gamma_i
+$$
+
+chunkwise 公式是：
+
+$$
+\boxed{
 D=U_g-\overleftarrow W S_0
+}
 $$
 
 $$
-O=\overleftarrow Q S_0 + ((QK^\top)\odot\Gamma)D
+\boxed{
+O=\overleftarrow Q S_0+\left((QK^\top)\odot\Gamma\right)D
+}
 $$
 
 $$
+\boxed{
 S_C=\gamma_C S_0+\overrightarrow K^\top D
+}
 $$
 
-其中各量 shape 是：
+如果只看维度，三个式子分别是：
+
+$$
+\mathbb{R}^{C\times d_v}
+=
+\mathbb{R}^{C\times d_v}
+-
+\mathbb{R}^{C\times d_k}
+\mathbb{R}^{d_k\times d_v}
+$$
+
+$$
+\mathbb{R}^{C\times d_v}
+=
+\mathbb{R}^{C\times d_k}
+\mathbb{R}^{d_k\times d_v}
++
+\mathbb{R}^{C\times C}
+\mathbb{R}^{C\times d_v}
+$$
+
+$$
+\mathbb{R}^{d_k\times d_v}
+=
+\mathbb{R}^{d_k\times d_v}
++
+\mathbb{R}^{d_k\times C}
+\mathbb{R}^{C\times d_v}
+$$
+
+这三行就是 kernel 的骨架：
 
 ```text
-U_g:              [C, dv]
-W_left:           [C, dk]
-D:                [C, dv]
-Q_left:           [C, dk]
-K_right:          [C, dk]
-S0:               [dk, dv]
-S_C:              [dk, dv]
-QK.T:             [C, C]
-Gamma:            [C, C]
-(QK.T) * Gamma:   [C, C]
-gamma_C:          scalar
-```
-
-其中：
-
-$$
-\overleftarrow Q_r=\gamma_r Q_r
-$$
-
-$$
-\overleftarrow W_r=\gamma_r W_r
-$$
-
-$$
-\overrightarrow K_i=\frac{\gamma_C}{\gamma_i}K_i
-$$
-
-主公式 shape 对齐：
-
-```text
-D = U_g - W_left @ S0:
-  [C,dv] = [C,dv] - [C,dk] @ [dk,dv]
-
-O = Q_left @ S0 + ((QK.T) * Gamma) @ D:
-  [C,dv] = [C,dk] @ [dk,dv] + [C,C] @ [C,dv]
-
-S_C = gamma_C * S0 + K_right.T @ D:
-  [dk,dv] = scalar * [dk,dv] + [dk,C] @ [C,dv]
+D:   先算真正要写入/读取的 pseudo-value
+O:   旧 state 贡献 + chunk 内新写入贡献
+S_C: decay 旧 state + 写入当前 chunk
 ```
 
 ## 4. W 和 U_g 为什么不一样
 
-普通 DeltaNet 里，chunk 内依赖由 lower-triangular solve 吸收：
+普通 DeltaNet 里，chunk 内依赖由一个 lower-triangular solve 吸收：
 
 $$
 A_w=
@@ -216,27 +210,11 @@ I+\operatorname{strictLower}\left(
 \right]^{-1}
 $$
 
-这里：
-
-```text
-diag(beta):              [C, C]
-K K.T:                   [C, C]
-diag(beta) @ (K K.T):    [C, C]
-A_w:                     [C, C]
-```
-
 $$
 W=A_w\operatorname{diag}(\beta)K
 $$
 
-shape：
-
-```text
-beta * K 等价于 diag(beta) @ K: [C, dk]
-W = A_w @ (beta * K):           [C, C] @ [C, dk] -> [C, dk]
-```
-
-Gated DeltaNet 多了 decay，所以写入侧变成 decay-aware 的 $U_g$：
+Gated DeltaNet 多了 scalar decay。写入侧要知道“第 $i$ 个写入传到第 $r$ 个位置时已经衰减多少”，所以用 decay-aware 的：
 
 $$
 A_u=
@@ -247,94 +225,46 @@ I+\operatorname{strictLower}\left(
 \right]^{-1}
 $$
 
-这里：
-
-```text
-Gamma:                         [C, C]
-K K.T:                         [C, C]
-Gamma * (K K.T):               [C, C]
-diag(beta) @ (Gamma * K K.T):  [C, C]
-A_u:                           [C, C]
-```
-
 $$
 U_g=A_u\operatorname{diag}(\beta)V
 $$
 
-shape：
-
-```text
-beta * V 等价于 diag(beta) @ V: [C, dv]
-U_g = A_u @ (beta * V):         [C, C] @ [C, dv] -> [C, dv]
-```
-
-关键区别：
-
-```text
-U_g:
-  处理 chunk 内第 i 个写入影响第 r 个 token
-  这条路径是 i -> r
-  所以 T/A_u 里要乘 Gamma_{r,i} = gamma_r / gamma_i
-
-W:
-  处理 chunk 开头传入的旧 state S0
-  S0 等价于来自虚拟位置 0
-  这条路径是 0 -> r
-  所以衰减是 gamma_r / gamma_0 = gamma_r
-  这个 gamma_r 只和当前行有关，可以最后按行乘到 W 上
-```
-
-因此：
+区别可以这样记：
 
 $$
-\overleftarrow W_r=\gamma_r W_r
+U_g:\quad i\to r,\quad \text{chunk 内写入传播，所以 strict-lower 里带 }\Gamma_{r,i}
 $$
 
-而不是在 $W$ 的 lower-triangular solve 里再乘 $\Gamma$。
+$$
+W:\quad 0\to r,\quad \text{旧 state 来自 chunk 起点，所以最后按行乘 }\gamma_r
+$$
+
+因此擦旧 state 用的是：
+
+$$
+\overleftarrow W=\operatorname{diag}(\gamma)W
+$$
+
+而不是在 $A_w$ 里再乘 $\Gamma$。
 
 代码心智模型：
 
 ```text
-u / k_cumsum:
-  U_g = A_u @ (beta * V)
-  A_u 的 strict-lower 里带 Gamma mask
-
-w / k_cumdecay:
-  W = A_w @ (beta * K)
-  A_w 的 strict-lower 里不带 Gamma mask
-
-chunk_fwd_h_fn:
-  W_left = gamma * W
-  D = U_g - W_left @ S
+U_g = A_u @ (beta * V)          # strict-lower 里带 Gamma
+W   = A_w @ (beta * K)          # strict-lower 里不带 Gamma
+D   = (U_g) - (gamma * W) @ S
 ```
 
 ## 5. C=2,d=3 数值例子
 
-本节具体取：
-
-```text
-C = 2
-dk = 3
-dv = 3
-Q, K: [2, 3]
-V, U_g, D, O: [2, 3]
-W, W_left, K_right: [2, 3]
-S0, S_next: [3, 3]
-alpha, beta, gamma: [2]
-Gamma, A_u, A_w: [2, 2]
-```
-
 取：
 
 $$
-S_0=I
+C=2,\qquad d_k=d_v=3,\qquad S_0=I_3
 $$
 
 $$
-\alpha_1=0.5,\quad \beta_1=0.8
-$$
-
-$$
+\alpha_1=0.5,\quad \beta_1=0.8,\qquad
 \alpha_2=0.25,\quad \beta_2=0.5
 $$
 
@@ -343,18 +273,14 @@ Q=
 \begin{bmatrix}
 1 & 1 & 0.5\\
 1 & -1 & 2
-\end{bmatrix}
-$$
-
-$$
+\end{bmatrix},
+\quad
 K=
 \begin{bmatrix}
 1 & 0 & 0\\
 0 & 1 & 0
-\end{bmatrix}
-$$
-
-$$
+\end{bmatrix},
+\quad
 V=
 \begin{bmatrix}
 2 & 1 & 0.5\\
@@ -362,10 +288,10 @@ V=
 \end{bmatrix}
 $$
 
-这里：
+累计 decay：
 
 $$
-\gamma_1=0.5,\quad \gamma_2=0.125
+\gamma_1=0.5,\qquad \gamma_2=0.125
 $$
 
 $$
@@ -376,7 +302,7 @@ $$
 \end{bmatrix}
 $$
 
-因为 $k_1,k_2$ 正交，所以 $A_w,A_u$ 都退化成单位阵：
+因为 $k_1\perp k_2$，所以 $A_w=A_u=I_2$。于是：
 
 $$
 W=
@@ -394,24 +320,23 @@ U_g=
 \end{bmatrix}
 $$
 
-擦旧 state 时按行乘 $\gamma$：
+擦旧 state 的矩阵：
 
 $$
 \overleftarrow W=
+\operatorname{diag}(\gamma)W
+=
 \begin{bmatrix}
 0.4 & 0 & 0\\
 0 & 0.0625 & 0
 \end{bmatrix}
 $$
 
-因此：
+所以：
 
 $$
 D=U_g-\overleftarrow W S_0
-$$
-
-$$
-D=
+=
 \begin{bmatrix}
 1.2 & 0.8 & 0.4\\
 0.5 & 1.4375 & -0.5
@@ -422,13 +347,15 @@ $$
 
 $$
 \overleftarrow Q=
+\operatorname{diag}(\gamma)Q
+=
 \begin{bmatrix}
 0.5 & 0.5 & 0.25\\
 0.125 & -0.125 & 0.25
 \end{bmatrix}
 $$
 
-chunk 内读取：
+chunk 内读取矩阵：
 
 $$
 (QK^\top)\odot\Gamma=
@@ -438,41 +365,39 @@ $$
 \end{bmatrix}
 $$
 
-最终输出：
+输出：
 
 $$
 O=
 \overleftarrow Q S_0
 +
-((QK^\top)\odot\Gamma)D
-$$
-
-$$
-O=
+\left((QK^\top)\odot\Gamma\right)D
+=
 \begin{bmatrix}
 1.7 & 1.3 & 0.65\\
 -0.075 & -1.3625 & 0.85
 \end{bmatrix}
 $$
 
-state update 用：
+state update 需要：
 
 $$
 \overrightarrow K=
+\operatorname{diag}(\gamma_2/\gamma)K
+=
 \begin{bmatrix}
 0.25 & 0 & 0\\
 0 & 1 & 0
 \end{bmatrix}
 $$
 
+因此：
+
 $$
 S_{\text{next}}
 =
 \gamma_2S_0+\overrightarrow K^\top D
-$$
-
-$$
-S_{\text{next}}=
+=
 \begin{bmatrix}
 0.425 & 0.2 & 0.1\\
 0.5 & 1.5625 & -0.5\\
@@ -487,58 +412,28 @@ $$
 最小实现流程：
 
 ```text
-1. 读 Q,K,V,beta,alpha
-   Q,K: [C,dk], V: [C,dv], beta/alpha: [C]
-
-2. 计算 gamma = cumulative_prod(alpha)
-   gamma: [C]
-
-3. 构造 Gamma_{r,i} = gamma_r / gamma_i, r >= i
-   Gamma: [C,C]
-
-4. 计算 KKT = K @ K.T
-   KKT: [C,dk] @ [dk,C] -> [C,C]
-
-5. 计算 A_u = inverse_lower(I + strict_lower(diag(beta) @ (Gamma * KKT)))
-   A_u: [C,C]
-
-6. 计算 U_g = A_u @ (beta * V)
-   beta * V: [C,dv]
-   U_g: [C,C] @ [C,dv] -> [C,dv]
-
-7. 计算 A_w = inverse_lower(I + strict_lower(diag(beta) @ KKT))
-   A_w: [C,C]
-
-8. 计算 W = A_w @ (beta * K)
-   beta * K: [C,dk]
-   W: [C,C] @ [C,dk] -> [C,dk]
-
-9. 计算 Q_left = gamma * Q
-   Q_left: [C,dk]
-
-10. 计算 W_left = gamma * W
-    W_left: [C,dk]
-
-11. 计算 D = U_g - W_left @ S
-    D: [C,dv] - [C,dk] @ [dk,dv] -> [C,dv]
-
-12. 计算 O = Q_left @ S + ((Q @ K.T) * Gamma) @ D
-    O: [C,dv]
-
-13. 计算 K_right = (gamma_C / gamma) * K
-    K_right: [C,dk]
-
-14. 计算 S_next = gamma_C * S + K_right.T @ D
-    S_next: [dk,dv]
+1. gamma = cumulative_prod(alpha)
+2. Gamma[r,i] = gamma[r] / gamma[i], i <= r
+3. KKT = K @ K.T
+4. A_u = inverse_lower(I + strict_lower(diag(beta) @ (Gamma * KKT)))
+5. U_g = A_u @ (diag(beta) @ V)
+6. A_w = inverse_lower(I + strict_lower(diag(beta) @ KKT))
+7. W = A_w @ (diag(beta) @ K)
+8. Q_left = diag(gamma) @ Q
+9. W_left = diag(gamma) @ W
+10. D = U_g - W_left @ S
+11. O = Q_left @ S + ((Q @ K.T) * Gamma) @ D
+12. K_right = diag(gamma_C / gamma) @ K
+13. S_next = gamma_C * S + K_right.T @ D
 ```
 
 实现注意：
 
 ```text
-T/A_u/A_w 是 C x C lower triangular，小 chunk 可以放 shared memory。
 inverse_lower 不是真的求通用逆，而是 unit lower-triangular forward substitution。
-输出前如果代码有 q scale，要和 reference 保持一致。
-当前例子中 S0=I 只是为了手算清楚，实际代码常从零 state 开始。
+输出前如果代码有 q scale，要和 recurrent reference 保持一致。
+本文用 S0=I 只是为了手算清楚，实际代码常从零 state 开始。
+Q_left、W_left、K_right 都可以不 materialize，在 load 时乘 decay。
 ```
 
 ## 7. 和 KDA 的关系
@@ -548,21 +443,13 @@ KDA 可以看成把 Gated DeltaNet 的 scalar decay 推广成 channel-wise decay
 GDN 里：
 
 $$
-\gamma_r/\gamma_i
+\gamma_r/\gamma_i\in\mathbb{R}
 $$
 
-是一个 scalar。
-
-KDA 里通常用 log cumulative decay：
+KDA 里：
 
 $$
-g_r=\sum_{j=1}^{r}\log\alpha_j
+\exp(g_r-g_i)\in\mathbb{R}^{d_k}
 $$
 
-于是相对衰减写成：
-
-$$
-\exp(g_r-g_i)
-$$
-
-如果是 channel-wise decay，这个量就是一个向量，需要按 key channel 缩放 $K$，不能再简单当成一个 $C\times C$ scalar mask。
+所以 KDA 的相对 decay 需要按 key channel 缩放 $K$，不能再简单当成一个 $C\times C$ scalar mask。
