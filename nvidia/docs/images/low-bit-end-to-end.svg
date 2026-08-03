@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc" font-family="Noto Sans CJK SC">
+  <title id="title">NVIDIA 低比特张量从高精度数值到 Tensor Core 的端到端路径</title>
+  <desc id="desc">展示 recipe、量化、紧凑存储、GPU 内搬运、MMA 与 epilogue，并区分 W4A16、整数 MMA、FP8 和 Blackwell block-scaled MMA。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#17243a"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#059669"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .title { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 34px; font-weight: 700; fill: #f8fafc; }
+      .stage { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 22px; font-weight: 700; fill: #fff; }
+      .body { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 17px; fill: #dbeafe; }
+      .small { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 15px; fill: #cbd5e1; }
+      .chip { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 16px; font-weight: 700; fill: #f8fafc; }
+      .arrow { stroke: #94a3b8; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="760" rx="26" fill="url(#bg)"/>
+  <text x="800" y="58" text-anchor="middle" class="title">从高精度张量到 NVIDIA Tensor Core：一条完整低比特链路</text>
+
+  <g>
+    <rect x="55" y="115" width="230" height="170" rx="20" fill="url(#blue)"/>
+    <text x="170" y="158" text-anchor="middle" class="stage">① 高精度源张量</text>
+    <text x="170" y="198" text-anchor="middle" class="body">FP32 / BF16 / FP16</text>
+    <text x="170" y="230" text-anchor="middle" class="small">权重、激活或梯度</text>
+    <text x="170" y="258" text-anchor="middle" class="small">先确定统计轴与用途</text>
+
+    <rect x="340" y="115" width="250" height="170" rx="20" fill="#1e40af"/>
+    <text x="465" y="158" text-anchor="middle" class="stage">② Recipe / Scale</text>
+    <text x="465" y="196" text-anchor="middle" class="body">amax、calibration、QAT</text>
+    <text x="465" y="228" text-anchor="middle" class="small">tensor / row / group / block</text>
+    <text x="465" y="258" text-anchor="middle" class="small">scale、zero-point、rounding</text>
+
+    <rect x="645" y="115" width="250" height="170" rx="20" fill="url(#purple)"/>
+    <text x="770" y="158" text-anchor="middle" class="stage">③ Code 与元数据</text>
+    <text x="770" y="196" text-anchor="middle" class="body">INT8 / INT4 / FP8 / FP6 / FP4</text>
+    <text x="770" y="228" text-anchor="middle" class="small">data codes ＋ scale tensors</text>
+    <text x="770" y="258" text-anchor="middle" class="small">逻辑值 ≠ C++ 容器宽度</text>
+
+    <rect x="950" y="115" width="250" height="170" rx="20" fill="#6d28d9"/>
+    <text x="1075" y="158" text-anchor="middle" class="stage">④ GMEM / Checkpoint</text>
+    <text x="1075" y="196" text-anchor="middle" class="body">pack、repack、swizzle</text>
+    <text x="1075" y="228" text-anchor="middle" class="small">nibble / 6-bit stream / FP8 byte</text>
+    <text x="1075" y="258" text-anchor="middle" class="small">data 与 scale 独立布局</text>
+
+    <rect x="1255" y="115" width="290" height="170" rx="20" fill="url(#green)"/>
+    <text x="1400" y="158" text-anchor="middle" class="stage">⑤ GPU 内搬运</text>
+    <text x="1400" y="196" text-anchor="middle" class="body">HBM/L2 → SMEM → Reg/TMEM</text>
+    <text x="1400" y="228" text-anchor="middle" class="small">TMA / cp.async / ldmatrix</text>
+    <text x="1400" y="258" text-anchor="middle" class="small">padding、descriptor、tile layout</text>
+  </g>
+
+  <path class="arrow" d="M285 200 H335"/>
+  <path class="arrow" d="M590 200 H640"/>
+  <path class="arrow" d="M895 200 H945"/>
+  <path class="arrow" d="M1200 200 H1250"/>
+
+  <path class="arrow" d="M1400 290 V350 H800 V395"/>
+
+  <g>
+    <rect x="90" y="405" width="330" height="135" rx="18" fill="#334155" stroke="#f59e0b" stroke-width="3"/>
+    <text x="255" y="445" text-anchor="middle" class="stage">W4A16 / NF4</text>
+    <text x="255" y="480" text-anchor="middle" class="body">寄存器解包、查表、乘 group scale</text>
+    <text x="255" y="511" text-anchor="middle" class="small">最终进入 FP16/BF16 MMA</text>
+
+    <rect x="455" y="405" width="310" height="135" rx="18" fill="#334155" stroke="#38bdf8" stroke-width="3"/>
+    <text x="610" y="445" text-anchor="middle" class="stage">INT8 / INT4 native</text>
+    <text x="610" y="480" text-anchor="middle" class="body">整数 Tensor Core 点积</text>
+    <text x="610" y="511" text-anchor="middle" class="small">INT32 accumulate，scale 在 MMA 外</text>
+
+    <rect x="800" y="405" width="310" height="135" rx="18" fill="#334155" stroke="#a78bfa" stroke-width="3"/>
+    <text x="955" y="445" text-anchor="middle" class="stage">FP16 / BF16 / FP8</text>
+    <text x="955" y="480" text-anchor="middle" class="body">原生浮点 MMA / WGMMA</text>
+    <text x="955" y="511" text-anchor="middle" class="small">量化 scale 不等于指令 immediate</text>
+
+    <rect x="1145" y="405" width="365" height="135" rx="18" fill="#334155" stroke="#34d399" stroke-width="3"/>
+    <text x="1328" y="445" text-anchor="middle" class="stage">Blackwell MX / NVFP4</text>
+    <text x="1328" y="480" text-anchor="middle" class="body">低比特 data ＋ local scale 进入 MMA</text>
+    <text x="1328" y="511" text-anchor="middle" class="small">SM100 tcgen05 / SM120 warp mma</text>
+  </g>
+
+  <path class="arrow" d="M255 545 V605 H700"/>
+  <path class="arrow" d="M610 545 V605 H700"/>
+  <path class="arrow" d="M955 545 V605 H900"/>
+  <path class="arrow" d="M1328 545 V605 H900"/>
+
+  <g>
+    <rect x="700" y="575" width="200" height="90" rx="18" fill="#0f766e"/>
+    <text x="800" y="611" text-anchor="middle" class="stage">⑥ MMA</text>
+    <text x="800" y="642" text-anchor="middle" class="small">FP32 / INT32 accumulator</text>
+
+    <rect x="980" y="575" width="390" height="90" rx="18" fill="#065f46"/>
+    <text x="1175" y="611" text-anchor="middle" class="stage">⑦ Epilogue 与下一层</text>
+    <text x="1175" y="642" text-anchor="middle" class="small">bias / activation / global scale / requant / store</text>
+  </g>
+  <path class="arrow" d="M900 620 H975"/>
+
+  <text x="800" y="718" text-anchor="middle" class="small">每一层都必须写清：数值语义、物理布局、目标架构、API 契约与验证方法</text>
+</svg>

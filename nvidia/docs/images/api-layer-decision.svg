@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720" role="img" aria-labelledby="title desc" font-family="Noto Sans CJK SC">
+  <title id="title">NVIDIA 低比特任务的软件层选择</title>
+  <desc id="desc">按转换、训练、GEMM、部署和自定义 kernel 任务，在 CUDA Math、Transformer Engine、cuBLASLt、TensorRT-LLM、CUTLASS/CuTe 和 PTX 中选择最高可用的软件层。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#081421"/><stop offset="1" stop-color="#1d2d44"/></linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#94a3b8"/></marker>
+    <style>.title{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:34px;font-weight:700;fill:#f8fafc}.head{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:22px;font-weight:700;fill:#fff}.body{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:17px;fill:#e2e8f0}.small{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:15px;fill:#cbd5e1}.arrow{stroke:#94a3b8;stroke-width:4;fill:none;marker-end:url(#arr)}</style>
+  </defs>
+  <rect width="1600" height="720" rx="28" fill="url(#bg)"/>
+  <text x="800" y="56" text-anchor="middle" class="title">优先选择能完整表达任务的最高层接口，再按需要下沉</text>
+  <g>
+    <rect x="570" y="90" width="460" height="90" rx="20" fill="#334155" stroke="#94a3b8" stroke-width="2"/>
+    <text x="800" y="128" text-anchor="middle" class="head">当前低比特任务是什么？</text>
+    <text x="800" y="158" text-anchor="middle" class="small">先问“谁管理 recipe/layout”，不要先问“该写哪条 PTX”</text>
+  </g>
+  <path class="arrow" d="M800 184 V225"/>
+
+  <g>
+    <rect x="45" y="235" width="275" height="150" rx="18" fill="#1e40af"/>
+    <text x="183" y="275" text-anchor="middle" class="head">编码 / 转换</text>
+    <text x="183" y="312" text-anchor="middle" class="body">FP4/FP6/FP8 wrapper</text>
+    <text x="183" y="342" text-anchor="middle" class="small">rounding、saturation、pack</text>
+
+    <rect x="355" y="235" width="275" height="150" rx="18" fill="#4338ca"/>
+    <text x="493" y="275" text-anchor="middle" class="head">低精度训练</text>
+    <text x="493" y="312" text-anchor="middle" class="body">FP8 / MXFP8 / NVFP4</text>
+    <text x="493" y="342" text-anchor="middle" class="small">amax、recipe、autocast、通信</text>
+
+    <rect x="665" y="235" width="275" height="150" rx="18" fill="#6d28d9"/>
+    <text x="803" y="275" text-anchor="middle" class="head">公开 GEMM 调用</text>
+    <text x="803" y="312" text-anchor="middle" class="body">A/B/C/D 与 scale 已准备</text>
+    <text x="803" y="342" text-anchor="middle" class="small">heuristic、workspace、epilogue</text>
+
+    <rect x="975" y="235" width="275" height="150" rx="18" fill="#047857"/>
+    <text x="1113" y="275" text-anchor="middle" class="head">LLM 部署</text>
+    <text x="1113" y="312" text-anchor="middle" class="body">checkpoint → engine</text>
+    <text x="1113" y="342" text-anchor="middle" class="small">W4A16、FP8、NVFP4 plugins</text>
+
+    <rect x="1285" y="235" width="270" height="150" rx="18" fill="#b45309"/>
+    <text x="1420" y="275" text-anchor="middle" class="head">自定义 kernel</text>
+    <text x="1420" y="312" text-anchor="middle" class="body">特殊 layout / fusion / tile</text>
+    <text x="1420" y="342" text-anchor="middle" class="small">需要控制 pipeline 与指令</text>
+  </g>
+
+  <g class="arrow">
+    <path d="M800 225 H183 V230"/><path d="M800 225 H493 V230"/><path d="M800 225 V230"/><path d="M800 225 H1113 V230"/><path d="M800 225 H1420 V230"/>
+  </g>
+
+  <g>
+    <rect x="65" y="455" width="235" height="95" rx="16" fill="#2563eb"/>
+    <text x="183" y="493" text-anchor="middle" class="head">CUDA Math API</text>
+    <text x="183" y="524" text-anchor="middle" class="small">它不是 GEMM API</text>
+
+    <rect x="375" y="455" width="235" height="95" rx="16" fill="#4f46e5"/>
+    <text x="493" y="493" text-anchor="middle" class="head">Transformer Engine</text>
+    <text x="493" y="524" text-anchor="middle" class="small">它管理训练 recipe</text>
+
+    <rect x="685" y="455" width="235" height="95" rx="16" fill="#7c3aed"/>
+    <text x="803" y="493" text-anchor="middle" class="head">cuBLASLt</text>
+    <text x="803" y="524" text-anchor="middle" class="small">稳定的公开矩阵接口</text>
+
+    <rect x="995" y="455" width="235" height="95" rx="16" fill="#059669"/>
+    <text x="1113" y="493" text-anchor="middle" class="head">TensorRT-LLM</text>
+    <text x="1113" y="524" text-anchor="middle" class="small">模型级构图与部署</text>
+
+    <rect x="1305" y="455" width="230" height="95" rx="16" fill="#d97706"/>
+    <text x="1420" y="493" text-anchor="middle" class="head">CUTLASS / CuTe</text>
+    <text x="1420" y="524" text-anchor="middle" class="small">自定义 device kernel</text>
+  </g>
+
+  <path class="arrow" d="M183 390 V450"/><path class="arrow" d="M493 390 V450"/><path class="arrow" d="M803 390 V450"/><path class="arrow" d="M1113 390 V450"/><path class="arrow" d="M1420 390 V450"/>
+
+  <path class="arrow" d="M1420 555 V605 H1160"/>
+  <g>
+    <rect x="820" y="590" width="340" height="85" rx="17" fill="#9a3412"/>
+    <text x="990" y="625" text-anchor="middle" class="head">PTX / inline PTX</text>
+    <text x="990" y="655" text-anchor="middle" class="small">核对 ISA、operand、target；不是默认起点</text>
+  </g>
+  <text x="800" y="704" text-anchor="middle" class="small">下降一层意味着获得更多控制，也同时接管更多 layout、同步、生命周期与验证责任</text>
+</svg>

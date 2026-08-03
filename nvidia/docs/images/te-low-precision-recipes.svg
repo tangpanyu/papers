@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc" font-family="Noto Sans CJK SC">
+  <title id="title">Transformer Engine 低精度 recipe 对比</title>
+  <desc id="desc">对比 FP8 current、delayed、FP8 blockwise、MXFP8 和 NVFP4 的数据格式、缩放粒度、scale 类型、设备范围和通信要求。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07111f"/><stop offset="1" stop-color="#16263e"/></linearGradient>
+    <style>
+      .title { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 34px; font-weight: 700; fill: #f8fafc; }
+      .head { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 22px; font-weight: 700; fill: #fff; }
+      .body { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 17px; fill: #e2e8f0; }
+      .small { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 15px; fill: #cbd5e1; }
+      .band { font-family: Noto-Sans-CJK-SC, 'Noto Sans CJK SC', Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #f8fafc; }
+    </style>
+  </defs>
+  <rect width="1600" height="900" rx="28" fill="url(#bg)"/>
+  <text x="800" y="58" text-anchor="middle" class="title">Transformer Engine 2.16：低精度 recipe 不是同一种 scale</text>
+
+  <g>
+    <rect x="45" y="100" width="285" height="430" rx="22" fill="#1e3a8a"/>
+    <text x="188" y="145" text-anchor="middle" class="head">FP8 Current</text>
+    <text x="188" y="185" text-anchor="middle" class="body">E4M3 / Hybrid</text>
+    <text x="188" y="222" text-anchor="middle" class="body">当前 tensor amax</text>
+    <text x="188" y="258" text-anchor="middle" class="body">tensor-wide FP32 scale</text>
+    <rect x="75" y="292" width="225" height="64" rx="12" fill="#2563eb"/>
+    <text x="188" y="319" text-anchor="middle" class="small">响应分布变化快</text>
+    <text x="188" y="343" text-anchor="middle" class="small">通常需要当前统计</text>
+    <text x="188" y="397" text-anchor="middle" class="small">共享 tensor scale 的分片</text>
+    <text x="188" y="423" text-anchor="middle" class="small">需要同步 amax</text>
+    <text x="188" y="475" text-anchor="middle" class="band">Ada / Hopper / Blackwell</text>
+
+    <rect x="350" y="100" width="285" height="430" rx="22" fill="#3730a3"/>
+    <text x="493" y="145" text-anchor="middle" class="head">FP8 Delayed</text>
+    <text x="493" y="185" text-anchor="middle" class="body">E4M3 / Hybrid</text>
+    <text x="493" y="222" text-anchor="middle" class="body">历史 amax / 上一步 scale</text>
+    <text x="493" y="258" text-anchor="middle" class="body">tensor-wide FP32 scale</text>
+    <rect x="380" y="292" width="225" height="64" rx="12" fill="#4f46e5"/>
+    <text x="493" y="319" text-anchor="middle" class="small">更容易与当前计算融合</text>
+    <text x="493" y="343" text-anchor="middle" class="small">突变时存在滞后</text>
+    <text x="493" y="397" text-anchor="middle" class="small">维护 amax history</text>
+    <text x="493" y="423" text-anchor="middle" class="small">分布式 scale 需一致</text>
+    <text x="493" y="475" text-anchor="middle" class="band">Ada / Hopper / Blackwell</text>
+
+    <rect x="655" y="100" width="285" height="430" rx="22" fill="#6d28d9"/>
+    <text x="798" y="145" text-anchor="middle" class="head">FP8 Blockwise</text>
+    <text x="798" y="185" text-anchor="middle" class="body">E4M3 / Hybrid</text>
+    <text x="798" y="222" text-anchor="middle" class="body">A/G：1×128</text>
+    <text x="798" y="252" text-anchor="middle" class="body">W：默认 128×128</text>
+    <text x="798" y="282" text-anchor="middle" class="body">FP32 power-of-two scale</text>
+    <rect x="685" y="312" width="225" height="64" rx="12" fill="#7c3aed"/>
+    <text x="798" y="339" text-anchor="middle" class="small">row/column 可能需双份</text>
+    <text x="798" y="363" text-anchor="middle" class="small">compact ↔ GEMM-ready</text>
+    <text x="798" y="415" text-anchor="middle" class="small">Hopper recipe</text>
+    <text x="798" y="441" text-anchor="middle" class="small">Blackwell 以 MXFP8 模拟</text>
+    <text x="798" y="475" text-anchor="middle" class="band">Hopper+；Blackwell 优先 MXFP8</text>
+
+    <rect x="960" y="100" width="285" height="430" rx="22" fill="#047857"/>
+    <text x="1103" y="145" text-anchor="middle" class="head">MXFP8</text>
+    <text x="1103" y="185" text-anchor="middle" class="body">E4M3（可 Hybrid）</text>
+    <text x="1103" y="222" text-anchor="middle" class="body">1×32 / 32×1 microblock</text>
+    <text x="1103" y="258" text-anchor="middle" class="body">UE8M0 local scale</text>
+    <rect x="990" y="292" width="225" height="64" rx="12" fill="#059669"/>
+    <text x="1103" y="319" text-anchor="middle" class="small">block scale 不跨节点同步</text>
+    <text x="1103" y="343" text-anchor="middle" class="small">通信后再 swizzle</text>
+    <text x="1103" y="397" text-anchor="middle" class="small">rowwise 与 columnwise</text>
+    <text x="1103" y="423" text-anchor="middle" class="small">必须从高精度分别量化</text>
+    <text x="1103" y="475" text-anchor="middle" class="band">Blackwell SM100 / SM103</text>
+
+    <rect x="1265" y="100" width="290" height="430" rx="22" fill="#b45309"/>
+    <text x="1410" y="145" text-anchor="middle" class="head">NVFP4</text>
+    <text x="1410" y="185" text-anchor="middle" class="body">E2M1 data</text>
+    <text x="1410" y="222" text-anchor="middle" class="body">A/G：1×16</text>
+    <text x="1410" y="252" text-anchor="middle" class="body">W：默认 16×16</text>
+    <text x="1410" y="282" text-anchor="middle" class="body">E4M3 local ＋ FP32 global</text>
+    <rect x="1298" y="312" width="224" height="64" rx="12" fill="#d97706"/>
+    <text x="1410" y="339" text-anchor="middle" class="small">gradient stochastic rounding</text>
+    <text x="1410" y="363" text-anchor="middle" class="small">WGRAD：RHT 平滑 outlier</text>
+    <text x="1410" y="415" text-anchor="middle" class="small">local scale 不同步</text>
+    <text x="1410" y="441" text-anchor="middle" class="small">global amax/scale 需一致</text>
+    <text x="1410" y="475" text-anchor="middle" class="band">Blackwell</text>
+  </g>
+
+  <rect x="70" y="585" width="1460" height="115" rx="20" fill="#26364d" stroke="#64748b" stroke-width="2"/>
+  <text x="800" y="620" text-anchor="middle" class="head">训练中的方向性：rowwise 与 columnwise 量化不一定能互相转置得到</text>
+  <text x="800" y="656" text-anchor="middle" class="body">block 成员或 scale 方向变化时，应从同一个高精度源张量分别产生两种表示，避免对已经量化的数据再次量化</text>
+  <text x="800" y="684" text-anchor="middle" class="small">例外由具体 recipe 的 2D block 与硬件 layout 规则决定，不能只交换 transpose flag</text>
+
+  <rect x="70" y="735" width="1460" height="110" rx="20" fill="#123b4a" stroke="#22d3ee" stroke-width="2"/>
+  <text x="800" y="770" text-anchor="middle" class="head">分布式路径：高精度/compact quantize → quantized all-gather → swizzle/pad → GEMM</text>
+  <text x="800" y="806" text-anchor="middle" class="body">通信布局追求连续与无 padding；Tensor Core 布局追求 tile/scale 访问。两者通常不是同一个物理字节序。</text>
+  <text x="800" y="833" text-anchor="middle" class="small">per-tensor/global scale 可能需要 amax all-reduce；纯 local block scale 通常无需跨节点同步</text>
+</svg>

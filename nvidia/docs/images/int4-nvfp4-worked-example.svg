@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="860" viewBox="0 0 1600 860" role="img" aria-labelledby="title desc" font-family="Noto Sans CJK SC">
+  <title id="title">同一张量的 INT4 与 NVFP4 端到端量化算例</title>
+  <desc id="desc">从两个 16 值 block 出发，比较 symmetric INT4 group scale 与 NVFP4 global/local scale、4-bit code、packed bytes 和恢复误差。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#081321"/><stop offset="1" stop-color="#1e293b"/></linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#94a3b8"/></marker>
+    <style>
+      .title{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:34px;font-weight:700;fill:#f8fafc}.head{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:23px;font-weight:700;fill:#fff}.body{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:17px;fill:#e2e8f0}.mono{font-family:'DejaVu Sans Mono',monospace;font-size:17px;fill:#f8fafc}.small{font-family:Noto-Sans-CJK-SC,'Noto Sans CJK SC',Arial,sans-serif;font-size:15px;fill:#cbd5e1}.arrow{stroke:#94a3b8;stroke-width:4;fill:none;marker-end:url(#arr)}
+    </style>
+  </defs>
+  <rect width="1600" height="860" rx="28" fill="url(#bg)"/>
+  <text x="800" y="55" text-anchor="middle" class="title">同一张量走两条 4-bit 路径：scale 相同重要，codebook 也同样重要</text>
+
+  <g>
+    <rect x="170" y="90" width="1260" height="130" rx="20" fill="#334155" stroke="#64748b" stroke-width="2"/>
+    <text x="800" y="126" text-anchor="middle" class="head">FP32 源张量：两个 block，第二个正好是第一个的一半</text>
+    <text x="800" y="164" text-anchor="middle" class="mono">z = [-6,-5,-4,-3,-2,-1.5,-1,-.5,0,.25,.5,1,1.5,2.5,4,6]</text>
+    <text x="800" y="197" text-anchor="middle" class="mono">x = (7/8) z  ||  (7/16) z</text>
+  </g>
+
+  <path class="arrow" d="M800 225 V260 H420 V288"/>
+  <path class="arrow" d="M800 225 V260 H1180 V288"/>
+
+  <g>
+    <rect x="55" y="290" width="720" height="385" rx="22" fill="#173b66" stroke="#38bdf8" stroke-width="3"/>
+    <text x="415" y="330" text-anchor="middle" class="head">symmetric INT4，group size = 16</text>
+    <text x="415" y="370" text-anchor="middle" class="body">每组 scale：amax / 7</text>
+    <text x="415" y="404" text-anchor="middle" class="mono">s = [0.75, 0.375]  (FP16: 00 3A 00 36)</text>
+    <rect x="95" y="438" width="640" height="82" rx="14" fill="#0f2d4d"/>
+    <text x="415" y="470" text-anchor="middle" class="small">两个 block 的 signed codes 相同</text>
+    <text x="415" y="500" text-anchor="middle" class="mono">-7 -6 -5 -4 -2 -2 -1 -1  0 0 1 1 2 3 5 7</text>
+    <text x="415" y="552" text-anchor="middle" class="body">two's-complement nibble，先出现元素放低 4 bit</text>
+    <text x="415" y="590" text-anchor="middle" class="mono">A9 CB EE FF 00 11 32 75  × 2 blocks</text>
+    <text x="415" y="635" text-anchor="middle" class="small">scale 是线性的；所有整数 code 等间距</text>
+
+    <rect x="825" y="290" width="720" height="385" rx="22" fill="#4b2b66" stroke="#c084fc" stroke-width="3"/>
+    <text x="1185" y="330" text-anchor="middle" class="head">NVFP4，1D block size = 16</text>
+    <text x="1185" y="370" text-anchor="middle" class="body">FP32 global scale ＋ E4M3 local scale</text>
+    <text x="1185" y="404" text-anchor="middle" class="mono">Sglobal = 1/512；slocal = [448, 224]</text>
+    <rect x="865" y="438" width="640" height="82" rx="14" fill="#37204d"/>
+    <text x="1185" y="470" text-anchor="middle" class="small">两个 block 的 E2M1 values 相同</text>
+    <text x="1185" y="500" text-anchor="middle" class="mono">-6 -4 -4 -3 -2 -1.5 -1 -.5  0 0 .5 1 1.5 2 4 6</text>
+    <text x="1185" y="552" text-anchor="middle" class="body">E2M1 nibble；local scale bytes = 7E 76</text>
+    <text x="1185" y="590" text-anchor="middle" class="mono">EF DE BC 9A 00 21 43 76  × 2 blocks</text>
+    <text x="1185" y="635" text-anchor="middle" class="small">scale 更细，但 E2M1 codebook 并非等间距</text>
+  </g>
+
+  <path class="arrow" d="M415 680 V718 H700"/>
+  <path class="arrow" d="M1185 680 V718 H900"/>
+
+  <g>
+    <rect x="560" y="710" width="480" height="105" rx="20" fill="#065f46"/>
+    <text x="800" y="750" text-anchor="middle" class="head">unpack → dequant → 与 FP32 比较</text>
+    <text x="800" y="784" text-anchor="middle" class="body">INT4：SQNR 22.35 dB　NVFP4：SQNR 20.73 dB</text>
+    <text x="800" y="808" text-anchor="middle" class="small">本例只验证数值与逻辑 packing，不代表 GPU kernel 性能</text>
+  </g>
+</svg>
