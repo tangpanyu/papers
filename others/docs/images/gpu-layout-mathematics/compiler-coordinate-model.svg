@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="700" viewBox="0 0 1500 700" role="img" aria-labelledby="title desc">
+  <title id="title">编译器中的离散坐标模型</title>
+  <desc id="desc">展示迭代域、调度映射、访问映射和存储地址之间的关系，并对比整数仿射、二进制线性和 CuTe 半模三种代数。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #172033; }
+      .title { font-size: 34px; font-weight: 700; }
+      .head { font-size: 23px; font-weight: 700; }
+      .body { font-size: 18px; }
+      .small { font-size: 15px; fill: #475569; }
+      .mono { font-family: "JetBrains Mono", "Noto Sans Mono CJK SC", monospace; font-size: 17px; }
+      .edge { fill: none; stroke: #64748b; stroke-width: 4; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1500" height="700" rx="26" fill="#f8fafc"/>
+  <text x="750" y="55" text-anchor="middle" class="title">编译器视角：程序也由离散集合、映射与关系组成</text>
+
+  <g>
+    <rect x="45" y="110" width="300" height="150" rx="18" fill="#dbeafe" stroke="#3b82f6" stroke-width="3"/>
+    <text x="195" y="151" text-anchor="middle" class="head">迭代域 D</text>
+    <text x="195" y="188" text-anchor="middle" class="mono">{(i,j)∈Z² | 0≤i&lt;M, 0≤j&lt;N}</text>
+    <text x="195" y="224" text-anchor="middle" class="small">整数集合 / loop bounds</text>
+
+    <rect x="425" y="110" width="280" height="150" rx="18" fill="#ede9fe" stroke="#8b5cf6" stroke-width="3"/>
+    <text x="565" y="151" text-anchor="middle" class="head">调度 θ</text>
+    <text x="565" y="188" text-anchor="middle" class="mono">(i,j) → (j,i)</text>
+    <text x="565" y="224" text-anchor="middle" class="small">执行次序 / loop transform</text>
+
+    <rect x="785" y="110" width="300" height="150" rx="18" fill="#dcfce7" stroke="#10b981" stroke-width="3"/>
+    <text x="935" y="151" text-anchor="middle" class="head">访问映射 F</text>
+    <text x="935" y="188" text-anchor="middle" class="mono">(i,j) → i·ld + j</text>
+    <text x="935" y="224" text-anchor="middle" class="small">array subscript / layout</text>
+
+    <rect x="1165" y="110" width="290" height="150" rx="18" fill="#ffedd5" stroke="#f97316" stroke-width="3"/>
+    <text x="1310" y="151" text-anchor="middle" class="head">内存 / 资源</text>
+    <text x="1310" y="188" text-anchor="middle" class="mono">address, bank, lane</text>
+    <text x="1310" y="224" text-anchor="middle" class="small">碰撞、局部性、向量化约束</text>
+
+    <path class="edge" d="M345 185 H420"/>
+    <path class="edge" d="M705 185 H780"/>
+    <path class="edge" d="M1085 185 H1160"/>
+  </g>
+
+  <rect x="45" y="305" width="1410" height="3" fill="#cbd5e1"/>
+  <text x="750" y="352" text-anchor="middle" class="head">三个常见代数，不要混用运算规则</text>
+
+  <g>
+    <rect x="55" y="390" width="430" height="220" rx="20" fill="#ffffff" stroke="#60a5fa" stroke-width="3"/>
+    <text x="270" y="432" text-anchor="middle" class="head">Z 上的 affine / Presburger</text>
+    <text x="270" y="470" text-anchor="middle" class="mono">y = A·x + B·s + c</text>
+    <text x="270" y="507" text-anchor="middle" class="body">加减、常数乘、常数 div/mod</text>
+    <text x="270" y="542" text-anchor="middle" class="small">MLIR Affine、polyhedral dependence</text>
+    <text x="270" y="572" text-anchor="middle" class="small">擅长非 2 次幂 shape 与循环边界</text>
+
+    <rect x="535" y="390" width="430" height="220" rx="20" fill="#ffffff" stroke="#a78bfa" stroke-width="3"/>
+    <text x="750" y="432" text-anchor="middle" class="head">F₂ 上的 linear map</text>
+    <text x="750" y="470" text-anchor="middle" class="mono">y = A·x，addition = XOR</text>
+    <text x="750" y="507" text-anchor="middle" class="body">basis bit、矩阵秩、kernel/image</text>
+    <text x="750" y="542" text-anchor="middle" class="small">Triton Linear Layout、bit swizzle</text>
+    <text x="750" y="572" text-anchor="middle" class="small">擅长 power-of-two 硬件分布</text>
+
+    <rect x="1015" y="390" width="430" height="220" rx="20" fill="#ffffff" stroke="#34d399" stroke-width="3"/>
+    <text x="1230" y="432" text-anchor="middle" class="head">CuTe integer-semimodule</text>
+    <text x="1230" y="470" text-anchor="middle" class="mono">L(c) = D · S(c)</text>
+    <text x="1230" y="507" text-anchor="middle" class="body">整数、坐标、F₂ bit 串都可作 stride</text>
+    <text x="1230" y="542" text-anchor="middle" class="small">层级 shape + layout algebra</text>
+    <text x="1230" y="572" text-anchor="middle" class="small">在自然坐标上线性，整体是 semi-linear</text>
+  </g>
+
+  <text x="750" y="663" text-anchor="middle" class="small">Relation 比 function 更一般：一个迭代可关联多个地址，多个迭代也可访问同一地址；依赖分析正是研究这种多对多关系。</text>
+</svg>

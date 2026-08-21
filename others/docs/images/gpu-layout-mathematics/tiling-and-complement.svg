@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="750" viewBox="0 0 1500 750" role="img" aria-labelledby="title desc">
+  <title id="title">Tile 坐标与 Grid 坐标</title>
+  <desc id="desc">把八乘八坐标空间分成四个四乘四 tile，展示 local coordinate 和 grid coordinate 如何组合成全局坐标，以及 complement 在 logical divide 中补齐剩余自由度。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; fill: #172033; }
+      .title { font-size: 34px; font-weight: 700; }
+      .head { font-size: 24px; font-weight: 700; }
+      .body { font-size: 18px; }
+      .small { font-size: 15px; fill: #475569; }
+      .mono { font-family: "JetBrains Mono", "Noto Sans Mono CJK SC", monospace; font-size: 19px; }
+      .edge { fill: none; stroke: #64748b; stroke-width: 4; marker-end: url(#arrow); }
+    </style>
+    <pattern id="minorGrid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <rect width="1500" height="750" rx="26" fill="#f8fafc"/>
+  <text x="750" y="55" text-anchor="middle" class="title">Tiling = 把一个坐标拆成“tile 内”与“第几个 tile”</text>
+
+  <g transform="translate(65,105)">
+    <rect width="600" height="570" rx="22" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
+    <text x="300" y="43" text-anchor="middle" class="head">8×8 坐标空间，tile shape = (4,4)</text>
+    <g transform="translate(108,80)">
+      <rect x="0" y="0" width="192" height="192" fill="#dbeafe"/>
+      <rect x="192" y="0" width="192" height="192" fill="#ede9fe"/>
+      <rect x="0" y="192" width="192" height="192" fill="#dcfce7"/>
+      <rect x="192" y="192" width="192" height="192" fill="#ffedd5"/>
+      <rect width="384" height="384" fill="url(#minorGrid)" stroke="#334155" stroke-width="4"/>
+      <path d="M192 0V384 M0 192H384" stroke="#334155" stroke-width="6"/>
+      <text x="96" y="102" text-anchor="middle" class="body">grid (0,0)</text>
+      <text x="288" y="102" text-anchor="middle" class="body">grid (0,1)</text>
+      <text x="96" y="294" text-anchor="middle" class="body">grid (1,0)</text>
+      <text x="288" y="294" text-anchor="middle" class="body">grid (1,1)</text>
+      <rect x="240" y="288" width="48" height="48" fill="#f97316" stroke="#9a3412" stroke-width="4"/>
+      <text x="264" y="319" text-anchor="middle" fill="#fff" style="font-family:'Noto Sans CJK SC';font-size:16px;font-weight:700">★</text>
+    </g>
+    <text x="300" y="500" text-anchor="middle" class="body">高亮元素：global (m,n)=(6,5)</text>
+    <text x="300" y="536" text-anchor="middle" class="mono">local=(2,1)，grid=(1,1)</text>
+  </g>
+
+  <g transform="translate(720,105)">
+    <rect width="715" height="570" rx="22" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
+    <text x="357" y="43" text-anchor="middle" class="head">坐标代数与 CuTe 操作</text>
+
+    <rect x="45" y="82" width="265" height="100" rx="16" fill="#dbeafe" stroke="#3b82f6" stroke-width="3"/>
+    <text x="177" y="120" text-anchor="middle" class="head">Tile coordinate</text>
+    <text x="177" y="153" text-anchor="middle" class="mono">(mₗ,nₗ) ∈ Z₍₄,₄₎</text>
+
+    <rect x="405" y="82" width="265" height="100" rx="16" fill="#dcfce7" stroke="#10b981" stroke-width="3"/>
+    <text x="537" y="120" text-anchor="middle" class="head">Grid coordinate</text>
+    <text x="537" y="153" text-anchor="middle" class="mono">(mɢ,nɢ) ∈ Z₍₂,₂₎</text>
+
+    <path d="M177 185 V225 H357" fill="none" stroke="#64748b" stroke-width="4"/>
+    <path d="M537 185 V225 H357" fill="none" stroke="#64748b" stroke-width="4"/>
+    <path class="edge" d="M357 225 V270"/>
+
+    <rect x="145" y="275" width="425" height="105" rx="17" fill="#ede9fe" stroke="#8b5cf6" stroke-width="3"/>
+    <text x="357" y="317" text-anchor="middle" class="mono">(m,n)=(mₗ+4mɢ, nₗ+4nɢ)</text>
+    <text x="357" y="351" text-anchor="middle" class="body">((4,4),(2,2)) → (8,8)</text>
+
+    <rect x="45" y="420" width="625" height="105" rx="17" fill="#fff7ed" stroke="#fb923c" stroke-width="3"/>
+    <text x="357" y="457" text-anchor="middle" class="head">Complement 的角色</text>
+    <text x="357" y="488" text-anchor="middle" class="body">给定 tile 生成规则 B，B* 构造尚未指定的 grid 自由度</text>
+    <text x="357" y="514" text-anchor="middle" class="small">它是一个 layout，不是把 image 当集合后直接做差集。</text>
+
+    <text x="357" y="555" text-anchor="middle" class="mono">zipped_divide(A,(4,4)) : ((4,4),(2,2)) → Offset</text>
+  </g>
+
+  <text x="750" y="720" text-anchor="middle" class="small">logical product 用 complement 重复一个 tile；logical divide 用 complement 把原 layout 拆成 tile 与 rest/grid。</text>
+</svg>
