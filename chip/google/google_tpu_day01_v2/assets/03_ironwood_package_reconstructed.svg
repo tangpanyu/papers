@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="980" viewBox="0 0 1800 980">
+<style>
+text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
+.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}.h{font-size:20px;font-weight:700}.t{font-size:16px}.small{font-size:13px;fill:#5f6368}
+.pkg{fill:#fff;stroke:#5f6368;stroke-width:2;stroke-dasharray:8 6;rx:18}.logic{fill:#fff1df;stroke:#c79043;stroke-width:2;rx:14}.compute{fill:#eaf2ff;stroke:#5f83c7;stroke-width:2;rx:8}.mem{fill:#eaf6e8;stroke:#6d9b63;stroke-width:2;rx:8}.inter{fill:#fff6cc;stroke:#c8a532;stroke-width:2;rx:8}.host{fill:#eee7f7;stroke:#8a70a1;stroke-width:2;rx:8}.mgmt{fill:#f7e6e6;stroke:#a56c6c;stroke-width:2;rx:8}.serdes{fill:#f3eafd;stroke:#8e6ca9;stroke-width:2;stroke-dasharray:7 5;rx:12}.arrow{stroke:#4b5563;stroke-width:2;marker-end:url(#a)}.bi{stroke:#4b5563;stroke-width:2;marker-start:url(#b);marker-end:url(#a)}
+</style>
+<defs>
+<marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#4b5563"/></marker>
+<marker id="b" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto"><path d="M9,0 L9,6 L0,3 z" fill="#4b5563"/></marker>
+</defs>
+<text x="55" y="55" class="title">TPU7x / Ironwood package：双 compute chiplet + SerDes chiplet</text>
+<text x="55" y="88" class="sub">根据 Google TPU7x 官方 Figure “Ironwood architecture diagram” 与配套文字重绘 · schematic · not to scale</text>
+
+<rect x="45" y="120" width="1690" height="785" class="pkg"/>
+<text x="70" y="150" class="small">TPU7x chip/package boundary</text>
+
+<!-- host -->
+<rect x="70" y="185" width="125" height="70" class="host"/><text x="109" y="227" class="h">Host</text>
+<rect x="220" y="205" width="110" height="70" class="mgmt"/><text x="248" y="247" class="h">gBMC</text>
+<rect x="80" y="330" width="120" height="95" class="host"/><text x="105" y="367" class="t">PCIe Gen5</text><text x="126" y="394" class="t">x16</text>
+<rect x="220" y="330" width="110" height="95" class="host"/><text x="245" y="367" class="t">PCIe Gen2</text><text x="274" y="394" class="t">x1</text>
+<rect x="90" y="545" width="220" height="85" class="mgmt"/><text x="150" y="594" class="h">Chip Manager</text>
+<line x1="132" y1="255" x2="132" y2="330" class="bi"/><line x1="275" y1="275" x2="275" y2="330" class="bi"/>
+
+<!-- logic chiplet A -->
+<rect x="365" y="165" width="560" height="650" class="logic"/>
+<text x="390" y="195" class="h">Logic chiplet A · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
+<rect x="415" y="225" width="460" height="235" class="compute"/>
+<text x="440" y="255" class="h">TensorCore</text>
+<rect x="590" y="275" width="110" height="60" class="compute"/><text x="625" y="312" class="t">TCS</text>
+<rect x="455" y="340" width="90" height="55" class="compute"/><text x="480" y="373" class="t">XLU</text>
+<rect x="755" y="340" width="90" height="55" class="compute"/><text x="780" y="373" class="t">XLU</text>
+<rect x="455" y="410" width="90" height="55" class="compute"/><text x="480" y="443" class="t">MXU</text>
+<rect x="755" y="410" width="90" height="55" class="compute"/><text x="780" y="443" class="t">MXU</text>
+<rect x="590" y="345" width="110" height="120" class="compute"/><text x="618" y="397" class="t">VPU +</text><text x="620" y="425" class="t">VMEM</text>
+<rect x="410" y="495" width="470" height="90" class="mem"/><text x="515" y="547" class="h">Memory &amp; DMA Interconnect</text>
+<rect x="415" y="620" width="95" height="60" class="compute"/><text x="430" y="655" class="small">SparseCore</text>
+<rect x="520" y="620" width="95" height="60" class="compute"/><text x="535" y="655" class="small">SparseCore</text>
+<g class="small">
+<rect x="625" y="620" width="58" height="60" class="mem"/><text x="632" y="655">HBM3</text>
+<rect x="690" y="620" width="58" height="60" class="mem"/><text x="697" y="655">HBM3</text>
+<rect x="755" y="620" width="58" height="60" class="mem"/><text x="762" y="655">HBM3</text>
+<rect x="820" y="620" width="58" height="60" class="mem"/><text x="827" y="655">HBM3</text>
+</g>
+<g class="small">
+<rect x="625" y="720" width="58" height="55" class="mem"/><text x="629" y="751">stack</text>
+<rect x="690" y="720" width="58" height="55" class="mem"/><text x="694" y="751">stack</text>
+<rect x="755" y="720" width="58" height="55" class="mem"/><text x="759" y="751">stack</text>
+<rect x="820" y="720" width="58" height="55" class="mem"/><text x="824" y="751">stack</text>
+</g>
+
+<!-- logic chiplet B -->
+<rect x="950" y="165" width="560" height="650" class="logic"/>
+<text x="975" y="195" class="h">Logic chiplet B · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
+<rect x="1000" y="225" width="460" height="235" class="compute"/>
+<text x="1025" y="255" class="h">TensorCore</text>
+<rect x="1175" y="275" width="110" height="60" class="compute"/><text x="1210" y="312" class="t">TCS</text>
+<rect x="1040" y="340" width="90" height="55" class="compute"/><text x="1065" y="373" class="t">XLU</text>
+<rect x="1340" y="340" width="90" height="55" class="compute"/><text x="1365" y="373" class="t">XLU</text>
+<rect x="1040" y="410" width="90" height="55" class="compute"/><text x="1065" y="443" class="t">MXU</text>
+<rect x="1340" y="410" width="90" height="55" class="compute"/><text x="1365" y="443" class="t">MXU</text>
+<rect x="1175" y="345" width="110" height="120" class="compute"/><text x="1203" y="397" class="t">VPU +</text><text x="1205" y="425" class="t">VMEM</text>
+<rect x="995" y="495" width="470" height="90" class="mem"/><text x="1100" y="547" class="h">Memory &amp; DMA Interconnect</text>
+<rect x="1000" y="620" width="95" height="60" class="compute"/><text x="1015" y="655" class="small">SparseCore</text>
+<rect x="1105" y="620" width="95" height="60" class="compute"/><text x="1120" y="655" class="small">SparseCore</text>
+<g class="small">
+<rect x="1210" y="620" width="58" height="60" class="mem"/><text x="1217" y="655">HBM3</text>
+<rect x="1275" y="620" width="58" height="60" class="mem"/><text x="1282" y="655">HBM3</text>
+<rect x="1340" y="620" width="58" height="60" class="mem"/><text x="1347" y="655">HBM3</text>
+<rect x="1405" y="620" width="58" height="60" class="mem"/><text x="1412" y="655">HBM3</text>
+</g>
+<g class="small">
+<rect x="1210" y="720" width="58" height="55" class="mem"/><text x="1214" y="751">stack</text>
+<rect x="1275" y="720" width="58" height="55" class="mem"/><text x="1279" y="751">stack</text>
+<rect x="1340" y="720" width="58" height="55" class="mem"/><text x="1344" y="751">stack</text>
+<rect x="1405" y="720" width="58" height="55" class="mem"/><text x="1409" y="751">stack</text>
+</g>
+
+<!-- D2D -->
+<line x1="925" y1="535" x2="950" y2="535" class="bi"/>
+<text x="855" y="445" class="small">D2D: ~6× bandwidth of one 1D ICI link</text>
+
+<!-- serdes -->
+<rect x="1535" y="285" width="165" height="390" class="serdes"/>
+<text x="1565" y="318" class="h">SerDes chiplet</text>
+<rect x="1560" y="355" width="115" height="90" class="inter"/><text x="1587" y="395" class="t">ICI / ICR</text><text x="1593" y="420" class="small">router</text>
+<rect x="1560" y="475" width="115" height="85" class="inter"/><text x="1580" y="515" class="t">6× link</text><text x="1592" y="538" class="small">stack</text>
+<rect x="1560" y="590" width="115" height="60" class="serdes"/><text x="1572" y="625" class="small">6×112G SerDes</text>
+<line x1="1465" y1="540" x2="1535" y2="540" class="bi"/>
+<!-- host / management paths shown schematically, following official figure -->
+<path d="M140 425 V495 H410" fill="none" class="bi"/>
+<path d="M275 425 V545 H310" fill="none" class="bi"/>
+<path d="M310 587 H365 V545 H410" fill="none" class="bi"/>
+
+<text x="70" y="860" class="small">注 1：Google 官方图把每个 compute chiplet 画成独立 memory space；本文按官方文字标注每个 chiplet = 1 TensorCore + 2 SparseCores + 96 GB HBM。</text>
+<text x="70" y="888" class="small">注 2：本图用于教学，未尝试还原版图位置、总线位宽或真实物理 floorplan；未公开细节不推断。</text>
+</svg>

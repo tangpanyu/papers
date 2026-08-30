@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="780" viewBox="0 0 1600 780">
+<style>
+text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
+.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}.h{font-size:22px;font-weight:700}.t{font-size:17px}.small{font-size:14px;fill:#5f6368}
+.box{fill:#fff;stroke:#8a94a6;stroke-width:2;rx:18}.chip{fill:#eef3fd;stroke:#5f83c7;stroke-width:3;rx:18}.vm{fill:#f1f8e9;stroke:#7aa55c;stroke-width:3;rx:18}.slice{fill:#fff7e6;stroke:#c59a3d;stroke-width:3;rx:18}.pod{fill:#f7eefb;stroke:#9a6bb0;stroke-width:3;rx:18}
+.arrow{stroke:#5f6368;stroke-width:4;marker-end:url(#a)}
+</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#5f6368"/></marker></defs>
+<text x="65" y="60" class="title">Ironwood 资源层级：chiplet ≠ chip ≠ device ≠ VM ≠ slice ≠ Pod</text>
+<text x="65" y="94" class="sub">根据 TPU7x 官方文档重绘 · 逻辑/资源层级图，不表示实际物理布线 · not to scale</text>
+
+<g transform="translate(70,170)">
+<rect width="250" height="160" class="chip"/>
+<text x="22" y="38" class="h">Compute chiplet</text>
+<text x="22" y="76" class="t">1 × TensorCore</text>
+<text x="22" y="105" class="t">2 × SparseCore</text>
+<text x="22" y="134" class="t">96 GB HBM</text>
+</g>
+<text x="100" y="358" class="small">JAX 等框架暴露为 1 个 device</text>
+
+<path d="M330 250 H420" class="arrow"/>
+
+<g transform="translate(440,145)">
+<rect width="300" height="210" class="box"/>
+<text x="22" y="38" class="h">1 × TPU7x chip / package</text>
+<rect x="25" y="70" width="110" height="85" class="chip"/>
+<rect x="165" y="70" width="110" height="85" class="chip"/>
+<text x="46" y="105" class="t">chiplet A</text>
+<text x="186" y="105" class="t">chiplet B</text>
+<text x="50" y="134" class="small">device 0</text>
+<text x="190" y="134" class="small">device 1</text>
+<text x="25" y="185" class="t">192 GB HBM total</text>
+</g>
+<text x="470" y="390" class="small">2 个 compute chiplet；D2D 比 1D ICI link 快约 6×</text>
+
+<path d="M750 250 H830" class="arrow"/>
+
+<g transform="translate(850,145)">
+<rect width="260" height="210" class="vm"/>
+<text x="22" y="38" class="h">1 × TPU7x VM</text>
+<text x="22" y="78" class="t">4 × TPU7x chips</text>
+<text x="22" y="110" class="t">224 vCPU</text>
+<text x="22" y="142" class="t">960 GB host RAM</text>
+<text x="22" y="174" class="t">2 NUMA nodes</text>
+</g>
+<text x="880" y="390" class="small">host 管理单位；TPU 通过 PCIe 接入 host</text>
+
+<path d="M1120 250 H1200" class="arrow"/>
+
+<g transform="translate(1220,130)">
+<rect width="310" height="240" class="slice"/>
+<text x="22" y="38" class="h">TPU slice</text>
+<text x="22" y="80" class="t">从 Pod 中分配给 workload</text>
+<text x="22" y="112" class="t">例：4×4×4 = 64 chips</text>
+<text x="22" y="144" class="t">例：8×8×16 = 1024 chips</text>
+<text x="22" y="180" class="small">A×B×C 描述 ICI topology 维度</text>
+<text x="22" y="208" class="small">不是 tensor shape</text>
+</g>
+
+<path d="M1375 390 V470" class="arrow"/>
+<g transform="translate(1150,500)">
+<rect width="450" height="150" class="pod"/>
+<text x="22" y="40" class="h">TPU Pod / scale-up domain</text>
+<text x="22" y="80" class="t">Ironwood：最多 9216 chips</text>
+<text x="22" y="112" class="t">3D torus ICI；大 slice 由 4×4×4 cubes 组成</text>
+</g>
+<text x="65" y="720" class="small">关键：一颗物理 TPU7x chip 在框架层面暴露为两个 device；不要把 chip 数量和 device 数量混为一谈。</text>
+</svg>

@@ -21,7 +21,7 @@
 
 | 目标 | 推荐章节 |
 |---|---|
-| 先看懂 `Shape:Stride` | 0 → 1.1–1.7 → 2 |
+| 先看懂 `Shape:Stride` | 0 → 1 → 2.1–2.6 |
 | 推导 CuTe layout algebra | 0 → 1 → 2 → 3 |
 | 分析 MMA thread/value layout | 0 → 1 → 2 → 3.3–3.5 → 4 |
 | 补编译器索引数学 | 1.1–1.7 → 2.4–2.6 → 5 |
@@ -104,13 +104,25 @@ $$
 
 ### 1.1 有限集合、基数与笛卡尔积
 
-集合只描述“有哪些元素”。GPU 索引最常用的集合是有限整数区间
+集合只描述“有哪些元素”。GPU 索引最常用的集合是从 0 开始的有限整数区间
 
 $$
 I_N=\{0,1,\ldots,N-1\}.
 $$
 
-集合的元素数量称为基数，记作 $\lvert I_N\rvert=N$。
+例如
+
+$$
+I_4=\{0,1,2,3\}.
+$$
+
+它常表示“长度为 4 的对象有哪些合法下标”。集合的元素数量称为基数，竖线 $\lvert A\rvert$ 表示“数一数集合 $A$ 有几个元素”，所以
+
+$$
+\lvert I_4\rvert=4,
+\qquad
+\lvert I_N\rvert=N.
+$$
 
 若 $A$ 与 $B$ 是集合，它们的笛卡尔积为
 
@@ -118,14 +130,14 @@ $$
 A\times B=\{(a,b)\mid a\in A,\ b\in B\}.
 $$
 
-例如
+这不是把两个集合拼接或求并集，而是从 $A$、$B$ 各取一个元素，组成所有可能的有序对。比如
 
 $$
 I_2\times I_3
 =\{(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)\},
 $$
 
-并且
+第一项有 2 种选择，第二项有 3 种选择，因此共有 $2\times3=6$ 个坐标。一般地，所有配对的数量等于两边选择数的乘积：
 
 $$
 \lvert A\times B\rvert=\lvert A\rvert\,\lvert B\rvert.
@@ -155,6 +167,8 @@ $$
 ((2, 2), (4, (2, 2)))
 ```
 
+在 CuTe 中，tuple 最外层的每一项称为一个 `mode`（维度或分量）；一个 mode 内部还可以继续嵌套，这种嵌套项称为 multi-mode。例如 `(3,(2,2))` 有两个外层 mode：`3` 和 `(2,2)`。
+
 三个量需要分开：
 
 | 量 | 对 `S = (3,(2,2))` 的值 | 含义 |
@@ -167,13 +181,38 @@ $$
 
 ### 1.3 函数、domain、codomain 与 image
 
-函数写作
+先把函数记号逐项读开：
 
 $$
 f:A\to B.
 $$
 
-它要求：对 domain $A$ 中每个输入，都指定 codomain $B$ 中唯一一个输出。
+其中 $f$ 是函数名，$A$ 是 domain（定义域），$B$ 是 codomain（陪域）。它表示：允许从 $A$ 中输入一个元素，函数必须给出唯一一个属于 $B$ 的输出。
+
+例如
+
+$$
+f:I_4\to I_7,
+\qquad
+f(x)=2x.
+$$
+
+因为 $I_4=\{0,1,2,3\}$、$I_7=\{0,1,2,3,4,5,6\}$，所以这个函数逐项做的是：
+
+| 输入 $x$ | 输出 $f(x)$ |
+|---:|---:|
+| 0 | 0 |
+| 1 | 2 |
+| 2 | 4 |
+| 3 | 6 |
+
+三个集合不要混在一起：
+
+| 名称 | 本例 | 它回答的问题 |
+|---|---|---|
+| domain | $I_4=\{0,1,2,3\}$ | 允许输入什么？ |
+| codomain | $I_7=\{0,1,\ldots,6\}$ | 声明输出放在哪个集合？ |
+| image | $\{0,2,4,6\}$ | 实际输出了什么？ |
 
 `codomain` 是声明的一部分，`image` 是实际产生的集合：
 
@@ -181,13 +220,9 @@ $$
 \operatorname{image}(f)=\{f(x)\mid x\in A\}\subseteq B.
 $$
 
-例如
+因此 image 是 codomain 中真正被命中的部分，不一定等于整个 codomain。对一个已经定义好的函数，image 当然已经确定；但使用同样 domain 和 codomain 的另一个函数，可以有不同的 image。
 
-$$
-f:I_4\to I_7,\qquad f(x)=2x
-$$
-
-的 image 是 $\{0,2,4,6\}$，不是整个 $I_7$。
+二者没有谁天然“更重要”：codomain 用于声明函数类型和检查 composition 能否连接，image 用于判断实际覆盖、collision 与 hole。
 
 #### 单射、满射与双射
 
@@ -212,38 +247,48 @@ $$
 
 ### 1.4 Identity 与 composition
 
-集合 $A$ 上的恒等函数为
+集合 $A$ 上的恒等函数记作 $\operatorname{id}_A$，有些资料也写成 $I_A$：
 
 $$
-I_A:A\to A,\qquad I_A(x)=x.
+\operatorname{id}_A:A\to A,
+\qquad
+\operatorname{id}_A(x)=x.
 $$
+
+它的作用就是原样返回输入。本文优先写 $\operatorname{id}_A$，避免和有限索引集合 $I_N=\{0,\ldots,N-1\}$ 混淆。
 
 若
 
 $$
-B:X\to Y,\qquad A:Y\to Z,
+f:X\to Y,\qquad g:Y\to Z,
 $$
 
 则 composition 为
 
 $$
-A\circ B:X\to Z,
+g\circ f:X\to Z,
 $$
 
 并满足
 
 $$
-(A\circ B)(x)=A(B(x)).
+(g\circ f)(x)=g(f(x)).
 $$
 
-永远从右向左读：先 $B$，后 $A$。对应 CuTe：
+它只是把两个函数接起来：
+
+$$
+x\xrightarrow{f}f(x)\xrightarrow{g}g(f(x)).
+$$
+
+函数复合永远从右向左执行：$g\circ f$ 先用 $f$，再用 $g$。对应 CuTe：
 
 ```cpp
 composition(A, B);  // A ∘ B
 A.compose(B);       // 同上
 ```
 
-composition 的第一道检查不是代数计算，而是 type check：$B$ 的输出必须是 $A$ 能接受的输入。
+composition 的第一道检查不是代数计算，而是 type check：右侧函数的输出必须是左侧函数能接受的输入。上例中，$f$ 输出到 $Y$，而 $g$ 正好从 $Y$ 接收输入。
 
 普通函数在定义域匹配时满足结合律：
 
@@ -255,6 +300,8 @@ CuTe 允许在 extended domain 上评价 out-of-bounds 坐标，且不是每次 
 
 ### 1.5 Full inverse、left inverse 与 right inverse
 
+Inverse 不是第三种神秘运算，而是一个函数相对于另一个函数的身份。两个函数 composition 后，如果能抵消前面的变化、恢复原值，其中一个就扮演 inverse。
+
 若 $f:A\to B$ 是双射，则存在唯一 full inverse
 
 $$
@@ -264,17 +311,17 @@ $$
 满足
 
 $$
-f^{-1}\circ f=I_A,
+f^{-1}\circ f=\operatorname{id}_A,
 \qquad
-f\circ f^{-1}=I_B.
+f\circ f^{-1}=\operatorname{id}_B.
 $$
 
 一般函数未必双射，于是要把两个方向分开。
 
 | 名称 | 条件 | 对 $f$ 的必要性质 | 含义 |
 |---|---|---|---|
-| left inverse $g$ | $g\circ f=I_A$ | $f$ 单射 | 先前向，再恢复输入 |
-| right inverse $h$ | $f\circ h=I_B$ | $f$ 满射 | 每个目标选一个原像 |
+| left inverse $g$ | $g\circ f=\operatorname{id}_A$ | $f$ 单射 | 先前向，再恢复输入 |
+| right inverse $h$ | $f\circ h=\operatorname{id}_B$ | $f$ 满射 | 每个目标选一个原像 |
 
 名字按 inverse 写在 $f$ 的哪一侧判断，不按箭头朝向背。
 
@@ -284,35 +331,131 @@ $$
 g:I_7\to I_4,\qquad g(y)=\left\lfloor\frac{y}{2}\right\rfloor,
 $$
 
-于是对所有 $x\in I_4$，$g(f(x))=x$。奇数不在 $f$ 的 image 中，$g$ 在这些点取什么值不影响 left-inverse 条件。
-
-例二：$q:I_4\to I_2,\ q(x)=x\bmod2$ 是满射。选
+于是
 
 $$
-h:I_2\to I_4,\qquad h(y)=y,
+x\xrightarrow{f}2x\xrightarrow{g}
+\left\lfloor\frac{2x}{2}\right\rfloor=x.
 $$
 
-便有 $q(h(y))=y$。也可以选 $h(0)=2,h(1)=3$，所以 right inverse 通常不唯一。
+例如 $3\to6\to3$。因此对所有 $x\in I_4$，都有
+
+$$
+g(f(x))=x,
+\qquad
+g\circ f=\operatorname{id}_{I_4}.
+$$
+
+这里 $g$ 是函数名，left inverse 是 $g$ 相对于 $f$ 的身份。组合后“最终没有变化”正是 inverse 的目的：它保证经过 $f$ 后没有丢失输入信息，之后还能恢复。
+
+奇数不在 $f$ 的 image 中，$g$ 在这些点取什么值不影响 left-inverse 条件。反方向也不成立，例如
+
+$$
+f(g(1))=f(0)=0\ne1,
+$$
+
+所以 $g$ 只是 left inverse，不是完整的 $f^{-1}$。
+
+例二：$q:I_4\to I_2,\ q(x)=x\bmod2$ 是满射，它的全部映射是
+
+$$
+q(0)=0,\quad q(1)=1,\quad q(2)=0,\quad q(3)=1.
+$$
+
+可以选择第一个 right inverse
+
+$$
+h_1:I_2\to I_4,
+\qquad
+h_1(0)=0,\ h_1(1)=1.
+$$
+
+也可以选择另一个函数
+
+$$
+h_2:I_2\to I_4,
+\qquad
+h_2(0)=2,\ h_2(1)=3.
+$$
+
+两者分别满足
+
+$$
+0\xrightarrow{h_1}0\xrightarrow{q}0,
+\qquad
+1\xrightarrow{h_1}1\xrightarrow{q}1,
+$$
+
+以及
+
+$$
+0\xrightarrow{h_2}2\xrightarrow{q}0,
+\qquad
+1\xrightarrow{h_2}3\xrightarrow{q}1.
+$$
+
+所以 $q\circ h_1=\operatorname{id}_{I_2}$、$q\circ h_2=\operatorname{id}_{I_2}$。不是同一个 $h$ 的 image 突然改变了，而是存在两个不同的 right inverse；$h_1$ 的 image 是 $\{0,1\}$，$h_2$ 的 image 是 $\{2,3\}$。
 
 CuTe 的 `left_inverse` / `right_inverse` 还允许广义伪逆；不要仅凭本节的标准定义猜它们返回的 shape，第 3.5 节会精确定义。
 
 ### 1.6 Relation、等价关系与偏序
 
-关系 relation 是笛卡尔积的子集：
+函数要求每个输入恰好对应一个输出；关系 relation 更宽，只负责记录“哪些元素之间有关联”。在集合语言中，$A$ 到 $B$ 的关系就是从 $A\times B$ 中把有关联的有序对挑出来：
 
 $$
 R\subseteq A\times B.
 $$
 
-函数是特殊关系：每个 $a\in A$ 恰好关联一个 $b\in B$。关系可以一对多、多对一甚至多对多，这正适合编译器的依赖分析。
+函数也能写成这种有序对集合 $\{(a,f(a))\mid a\in A\}$，但普通关系还允许一对多、多对一和多对多，所以比函数更一般。
 
-一个集合上的关系若满足自反、对称、传递，就是等价关系。等价关系把对象分成互不重叠的等价类。Cecka 论文中的 HTuple congruence $\sim$ 就是等价关系：它只关心层级 profile，不关心叶子值。
+自反、对称、传递等性质需要比较同一个集合内的元素，此时关系写成
 
-一个关系若满足自反、反对称、传递，就是偏序 partial order。偏序只要求“可比较的元素有一致先后”，不要求任意两元素都可比较。论文中的 weak congruence $\lesssim$ 与 shape compatibility $\preceq$ 都是偏序；编译器中的 dominance、依赖顺序和数据流格也会使用同类结构。
+$$
+R\subseteq A\times A.
+$$
+
+记号
+
+$$
+a\mathrel{R}b
+\quad\Longleftrightarrow\quad
+(a,b)\in R
+$$
+
+表示“$a$ 与 $b$ 有关系”。例如 $A=\{1,2,3\}$，规定 1、2 属于同一组，3 单独一组，那么“同组”关系是
+
+$$
+R=\{(1,1),(1,2),(2,1),(2,2),(3,3)\}.
+$$
+
+例如 $(1,2)\in R$ 表示 1 和 2 同组，$(1,3)\notin R$ 表示 1 和 3 不同组。
+
+判断关系性质时，只需检查下面几条规则：
+
+| 性质 | 公式 | 不省略的读法 |
+|---|---|---|
+| 自反 reflexive | $\forall a\in A,\ (a,a)\in R$ | 每个元素都必须与自己有关系 |
+| 对称 symmetric | $(a,b)\in R\Rightarrow(b,a)\in R$ | 交换前后，关系仍成立 |
+| 传递 transitive | $(a,b),(b,c)\in R\Rightarrow(a,c)\in R$ | 能经过中间元素接力，就必须有直接关系 |
+| 反对称 antisymmetric | $(a,b),(b,a)\in R\Rightarrow a=b$ | 不同元素不能同时具有双向关系 |
+
+上面的“同组”关系是自反的，因为 $(1,1),(2,2),(3,3)$ 全部在 $R$ 中；是对称的，因为 $(1,2)$ 与 $(2,1)$ 成对出现；也是传递的，因为同一组内经过中间元素后仍在同一组。
+
+同时满足自反、对称、传递的关系称为等价关系。它的用途是按照某个标准，把元素分成互不重叠的等价类。上例的两个等价类就是
+
+$$
+\{1,2\},
+\qquad
+\{3\}.
+$$
+
+同时满足自反、反对称、传递的关系称为偏序。最熟悉的例子是 $\le$：如果 $a\le b$ 且 $b\le a$，只能有 $a=b$。注意“反对称”不是“反过来一定不成立”，而是说不同元素不能双向同时成立；偏序也不要求任意两个元素都能比较。
+
+这些定义在 CuTe 中不是单独执行的 GPU 操作，而是用来描述 shape 的结构关系。HTuple congruence $\sim$ 按层级 profile 分组；shape compatibility $\preceq$ 表示一种从粗坐标结构到细坐标结构的先后关系。第 2.2–2.3 节会把它们落实到具体 shape。
 
 ### 1.7 `div`、`mod` 与 mixed radix
 
-对整数 $i$ 和正整数 $N$，欧几里得除法给出唯一的商 $q$ 与余数 $r$：
+`div` 取商，`mod` 取余数。对整数 $i$ 和正整数 $N$，总能唯一写成
 
 $$
 i=qN+r,\qquad 0\le r<N,
@@ -326,7 +469,38 @@ q=i\mathbin{\mathrm{div}}N,
 r=i\bmod N.
 $$
 
-这就是 linearize / delinearize 与 tiling 的基础。若第一维最快变化，shape 为 $(S_0,S_1,\ldots,S_{R-1})$，则
+例如 $17=2\times6+5$，所以
+
+$$
+17\mathbin{\mathrm{div}}6=2,
+\qquad
+17\bmod6=5.
+$$
+
+这些运算用于在一维编号 $i$ 与多维坐标 $(c_0,c_1,\ldots)$ 之间来回转换：
+
+```text
+一维编号 i  --delinearize / idx2crd-->  多维坐标 c
+一维编号 i  <--linearize / crd2idx--    多维坐标 c
+```
+
+先翻译本节术语：
+
+| 英文 | 本文含义 |
+|---|---|
+| mode | shape 的一个维度或分量 |
+| radix | 该 mode 的基数；若 extent 是 $S_r$，坐标可取 $0,\ldots,S_r-1$ |
+| mixed radix | 各 mode 的 radix 可以不同，即混合进制 |
+| enumeration | 按顺序枚举所有坐标 |
+| colexicographical order | CuTe 的枚举顺序：$c_0$ 最快变化 |
+
+若 shape 为 $(S_0,S_1,\ldots,S_{R-1})$，并约定第 0 个 mode 最快变化，则对合法编号
+
+$$
+0\le i<\prod_{r=0}^{R-1}S_r,
+$$
+
+它的第 $r$ 个坐标为
 
 $$
 c_r=\left\lfloor
@@ -334,23 +508,107 @@ c_r=\left\lfloor
 \right\rfloor\bmod S_r,
 $$
 
-反向为
+其中
+
+$$
+\prod_{k<r}S_k=S_0S_1\cdots S_{r-1}.
+$$
+
+当 $r=0$ 时，条件 $k<0$ 选不到任何因子，数学规定空乘积等于 1：
+
+$$
+\prod_{k<0}S_k=1.
+$$
+
+这不是说 $S_0=1$，而只是说 $c_0$ 的分母为 1。因此前几个坐标展开为
+
+$$
+\begin{aligned}
+c_0&=i\bmod S_0,\\
+c_1&=\left\lfloor\frac{i}{S_0}\right\rfloor\bmod S_1,\\
+c_2&=\left\lfloor\frac{i}{S_0S_1}\right\rfloor\bmod S_2.
+\end{aligned}
+$$
+
+反向把多维坐标折叠成一维编号：
 
 $$
 i=\sum_{r=0}^{R-1}c_r\prod_{k<r}S_k.
 $$
 
-每个 mode 可以有不同 radix，所以叫 mixed radix。CuTe 默认的一维坐标枚举是 colexicographical order：$c_0$ 最快变化。这与 C/C++ 数组常见的“最后一维最快”不是一回事；存储顺序最终由 stride 决定，坐标枚举顺序由 shape 映射决定。
+例如 shape $(2,3)$ 中，$c_0$ 的 radix 是 2，$c_1$ 的 radix 是 3。CuTe 按 colexicographical order 枚举：
+
+| $i$ | $(c_0,c_1)$ |
+|---:|---:|
+| 0 | $(0,0)$ |
+| 1 | $(1,0)$ |
+| 2 | $(0,1)$ |
+| 3 | $(1,1)$ |
+| 4 | $(0,2)$ |
+| 5 | $(1,2)$ |
+
+$c_0$ 像个位一样先变化；到达 radix 2 后归零，并向 $c_1$ 进一位。对应折叠公式是
+
+$$
+i=c_0+2c_1.
+$$
+
+这与 C/C++ 多维数组常见的“最后一维最快”不是一回事。这里讲的是 shape 如何枚举坐标；真正映到什么内存顺序，仍由 stride 决定。
 
 ### 1.8 为什么论文需要 integer-semimodule？
 
-普通 stride 是整数，但 GPU layout 还希望输出二维坐标或一串 bit。论文因此不把 stride codomain 限死为 $\mathbb Z$，而要求它来自一个 integer-semimodule $M$。
+先只记核心公式。若自然坐标为 $c=(c_0,c_1,\ldots)$，stride 为 $D=(d_0,d_1,\ldots)$，layout 计算
+
+$$
+L(c)=c_0d_0+c_1d_1+\cdots.
+$$
+
+每一项 $c_rd_r$ 表示“沿第 $r$ 个 mode 走 $c_r$ 步所产生的变化”，最后把各个 mode 的变化相加。
+
+普通内存 layout 的 stride 是整数。例如
+
+$$
+L=(4,3):(1,4)
+$$
+
+满足
+
+$$
+L(c_0,c_1)=c_0\cdot1+c_1\cdot4.
+$$
+
+所以 $L(2,1)=6$，输出是一个整数 memory offset。此时每个 stride 叶子和最终输出都是整数，因此
+
+$$
+M=\mathbb Z.
+$$
+
+但 GPU layout 有时希望输出二维坐标，而不是整数地址。例如令
+
+$$
+d_0=(1,0),
+\qquad
+d_1=(0,1),
+$$
+
+则
+
+$$
+L(2,1)=2(1,0)+1(0,1)=(2,1).
+$$
+
+同一个公式仍然成立，只是每个 stride 叶子和最终输出变成了二维整数向量，此时 $M=\mathbb Z^2$。swizzle 还可能让输出成为 bit 串，并把上式中的加法解释成 XOR。
+
+因此，$M$ 可以先理解为“stride 和 layout 输出所属的集合或数据类型”。论文不把 $M$ 限死为整数，而只要求里面的元素能完成 layout 公式真正需要的运算。这类结构称为 integer-semimodule。
 
 对本文而言，只需记住 $M$ 支持：
 
-1. 可结合的加法 $M\times M\to M$；
-2. 整数数乘 $\mathbb Z\times M\to M$；
-3. 数乘满足 $1m=m$ 与 $a(bm)=(ab)m$。
+| 要求 | 直觉 |
+|---|---|
+| 可结合的加法 $M\times M\to M$ | 两个 mode 的贡献能够相加，先加哪一对不影响结果 |
+| 整数数乘 $\mathbb Z\times M\to M$ | 坐标 $c_r$ 能够把 stride $d_r$ 缩放为 $c_rd_r$ |
+| $1m=m$ | 沿某个 stride 走一步，得到它本身 |
+| $a(bm)=(ab)m$ | 分两次缩放与一次缩放的结果一致 |
 
 Cecka 论文采用的定义不强制加法单位元与逆元；这是为了容纳比传统 module 更宽的 stride 类型。常见实例为：
 
@@ -360,7 +618,9 @@ Cecka 论文采用的定义不强制加法单位元与逆元；这是为了容�
 | $\mathbb Z^m$ 或 coordinate HTuple | 分量运算 | 多维 tensor coordinate |
 | $\mathbb F_2^m$ | 加法为 XOR，乘法按 bit 的模 2 运算 | bit permutation / swizzle |
 
-这带来统一公式：无论 stride 是整数、坐标 basis 还是 bit 串，layout 都可以写成“自然坐标与 stride 的内积”。
+所以第一次阅读时不必先学习完整抽象代数，只需记住：
+
+> stride 不一定是整数；只要它能被整数坐标缩放，而且缩放结果能够相加，CuTe 就能用同一个“坐标与 stride 的内积”公式产生整数 offset、tensor coordinate 或 swizzle bit。
 
 ---
 
@@ -393,7 +653,9 @@ Shape 不只是容器；它同时规定了一族合法坐标空间。层级越�
 
 ### 2.2 Congruence 与 weak congruence
 
-两个 HTuple congruent，记作 $P\sim S$，当且仅当：
+Congruence 回答的是：两个 HTuple 的**括号结构是否相同**。这里的 profile（层级轮廓）只记录哪里是叶子、哪里是 tuple，以及每层 tuple 有几项；它不记录叶子里的具体数值。
+
+两个 HTuple congruent，记作 $P\sim S$，递归判断规则是：
 
 - 二者都是叶子；或
 - 二者都是相同 rank 的 tuple，且对应子项递归 congruent。
@@ -404,13 +666,47 @@ $$
 (4,(2,3))\sim(7,(9,5)),
 $$
 
-但
+因为两边的结构都是
+
+```text
+(叶子, (叶子, 叶子))
+```
+
+递归配对关系为
+
+```text
+4  ↔ 7
+2  ↔ 9
+3  ↔ 5
+```
+
+每一对都是“叶子对叶子”，所以 congruent。它不是只比较最外层 `len`；下面两边最外层 `len` 都是 2、叶子总数也都是 3，但嵌套位置不同：
 
 $$
-(4,6)\nsim(4,(2,3)).
+(4,(2,3))\nsim((4,2),3).
 $$
 
-叶子值完全不参与 congruence；它比较的是括号形成的树形 profile。
+自反性在这里的具体体现是，任意 HTuple 都与自己 congruent：
+
+$$
+S\sim S.
+$$
+
+例如把 $(4,(2,3))$ 与自身递归比较时，每一层的 rank、嵌套位置和叶子位置当然都一致。对称性表示 $P\sim S$ 就有 $S\sim P$；传递性表示 $P\sim S$ 且 $S\sim T$ 就有 $P\sim T$。因此“相同 profile”是等价关系，可以把所有 HTuple 按层级结构分组。
+
+这在 CuTe 中不是额外的运行时计算，而是 shape 与 stride 能否逐层配对的结构条件。例如
+
+$$
+S=(4,(2,3)),
+\qquad
+D=(1,(4,8))
+$$
+
+满足 $S\sim D$，所以三个 shape 叶子能分别配对三个 stride 叶子。对应 C++ 检查是：
+
+```cpp
+static_assert(congruent(my_shape, my_stride));
+```
 
 Weak congruence 记作 $P\lesssim S$，允许 $P$ 用一个叶子粗化 $S$ 的任意子树。比如
 
@@ -418,7 +714,7 @@ $$
 12\lesssim(3,4)\lesssim(3,(2,2)).
 $$
 
-它回答“这个坐标的层级是否不比目标 shape 更细”，不要求叶子 extent 相等。
+可以把这条链读成：单个叶子 `12` 最粗，`(3,4)` 展开一层，`(3,(2,2))` 又把第二个 mode 展开一层。它回答“左边的坐标层级是否不比右边更细”，不要求叶子 extent 相等。真正用于判断 shape 能否接受某种粗坐标时，还要加入 size 条件，这就是下一节的 compatibility。
 
 ### 2.3 Shape compatibility
 
@@ -433,11 +729,18 @@ P\in\mathbb Z_+\ \text{且}\ P=\lvert S\rvert, & P\text{ 是叶子};\\
 \end{cases}
 $$
 
+公式可以按两种情况读：
+
+- 如果左边 $P$ 是一个叶子，它要代表右边整棵子树，所以 $P$ 必须等于右边子树的 size；
+- 如果两边都是 tuple，它们的最外层 rank 必须相同，再逐项递归检查。
+
 典型链为
 
 $$
 12\preceq(3,4)\preceq(3,(2,2)).
 $$
+
+第一步成立是因为 $12=3\times4$；第二步中，第一个 mode 保持为 3，第二个 mode 则由 $4=2\times2$ 展开成 `(2,2)`。三种 shape 都描述同样的 12 个位置，只是坐标层级由粗到细。
 
 因此 shape $(3,(2,2))$ 至少接受三类坐标：
 
@@ -1108,8 +1411,8 @@ flat_divide    : (TileM, TileN, RestM, RestN, L, ...)
 | concatenate | $L(c)=\sum_iL_i(c_i)$ | 不是集合拼接，输出必须可相加 |
 | coalesce | 对所有 integral coordinates 保持评价 | 会丢 hierarchy / mode 语义 |
 | composition | $R(c)=A(B(c))$ | 先右后左；结果不一定仍可由单个 layout 表示 |
-| right inverse | $L\circ L^{\ddagger}=I$，只在所选 domain 上 | 常只恢复连续 offset 前缀 |
-| left inverse | injective 时 $L^{\dagger}\circ L=I$ | 非 injective 时只是 quasi-inverse |
+| right inverse | $L\circ L^{\ddagger}=\operatorname{id}$，只在所选 domain 上 | 常只恢复连续 offset 前缀 |
+| left inverse | injective 时 $L^{\dagger}\circ L=\operatorname{id}$ | 非 injective 时只是 quasi-inverse |
 | complement | 构造与原 layout 独立的剩余自由度 | 不是把 image 直接做集合差 |
 | logical product | $(A,A^*\circ B)$ | 用 $B$ 指定 tile 的复制顺序 |
 | logical divide | $A\circ(B,B^*)$ | 同时生成 tile 与 grid/rest |
@@ -1773,9 +2076,9 @@ $$
 #### Standard inverses
 
 $$
-g\circ f=I\quad\text{(left inverse)},
+g\circ f=\operatorname{id}\quad\text{(left inverse)},
 \qquad
-f\circ h=I\quad\text{(right inverse)}.
+f\circ h=\operatorname{id}\quad\text{(right inverse)}.
 $$
 
 #### CuTe generalized inverses

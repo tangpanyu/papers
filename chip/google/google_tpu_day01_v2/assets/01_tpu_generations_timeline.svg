@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720">
+<style>
+text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
+.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}
+.h{font-size:21px;font-weight:700}.t{font-size:17px}.small{font-size:14px;fill:#5f6368}
+.box{fill:#fff;stroke:#9aa0a6;stroke-width:2;rx:18}.em{fill:#eef3fd;stroke:#5f83c7;stroke-width:2;rx:18}
+.future{fill:#f8f9fa;stroke:#7c8a9b;stroke-width:2;stroke-dasharray:8 6;rx:18}
+.line{stroke:#5f6368;stroke-width:4}.arrow{fill:#5f6368}
+</style>
+<text x="70" y="62" class="title">Google TPU 产品演进：从推理 ASIC 到训练 / 推理分化</text>
+<text x="70" y="95" class="sub">根据 Google 官方 TPU 历史、Cloud TPU 文档与 2026 TPU 8 官方博客重绘 · schematic · not to scale</text>
+<line x1="120" y1="330" x2="1480" y2="330" class="line"/>
+<polygon points="1480,330 1455,316 1455,344" class="arrow"/>
+
+<g transform="translate(80,165)">
+<rect width="210" height="140" class="box"/>
+<text x="20" y="36" class="h">TPU v1</text>
+<text x="20" y="70" class="t">2015 部署</text>
+<text x="20" y="98" class="t">Inference ASIC</text>
+<text x="20" y="124" class="small">28 nm · PCIe accelerator</text>
+</g>
+<circle cx="185" cy="330" r="10" fill="#5f6368"/>
+
+<g transform="translate(350,375)">
+<rect width="230" height="150" class="box"/>
+<text x="20" y="38" class="h">TPU v2 / v3</text>
+<text x="20" y="72" class="t">Training 加入主线</text>
+<text x="20" y="100" class="t">高速互连 + Pod</text>
+<text x="20" y="128" class="small">芯片开始成为系统组成单元</text>
+</g>
+<circle cx="465" cy="330" r="10" fill="#5f6368"/>
+
+<g transform="translate(625,150)">
+<rect width="230" height="155" class="box"/>
+<text x="20" y="38" class="h">TPU v4</text>
+<text x="20" y="72" class="t">4096-chip Pod</text>
+<text x="20" y="100" class="t">3D topology</text>
+<text x="20" y="128" class="small">chip + ICI + Pod 共同定义产品</text>
+</g>
+<circle cx="740" cy="330" r="10" fill="#5f6368"/>
+
+<g transform="translate(900,375)">
+<rect width="250" height="165" class="em"/>
+<text x="20" y="38" class="h">TPU v5e / v5p → v6e</text>
+<text x="20" y="72" class="t">Efficiency / Performance 分层</text>
+<text x="20" y="102" class="t">Trillium = v6e</text>
+<text x="20" y="132" class="small">同代不再只做单一“旗舰”</text>
+</g>
+<circle cx="1025" cy="330" r="10" fill="#5f6368"/>
+
+<g transform="translate(1190,130)">
+<rect width="300" height="190" class="em"/>
+<text x="20" y="38" class="h">TPU7x · Ironwood</text>
+<text x="20" y="72" class="t">7th generation · GA</text>
+<text x="20" y="102" class="t">Dual-chiplet</text>
+<text x="20" y="132" class="t">9216 chips / Pod</text>
+<text x="20" y="162" class="small">2026-03-31 GA</text>
+</g>
+<circle cx="1340" cy="330" r="10" fill="#5f6368"/>
+
+<g transform="translate(1190,385)">
+<rect width="140" height="150" class="future"/>
+<text x="18" y="38" class="h">TPU 8t</text>
+<text x="18" y="72" class="t">Training</text>
+<text x="18" y="102" class="t">9600 chips</text>
+<text x="18" y="130" class="small">Coming soon</text>
+</g>
+<g transform="translate(1350,385)">
+<rect width="140" height="150" class="future"/>
+<text x="18" y="38" class="h">TPU 8i</text>
+<text x="18" y="72" class="t">Inference / RL</text>
+<text x="18" y="102" class="t">Boardfly</text>
+<text x="18" y="130" class="small">Coming soon</text>
+</g>
+<line x1="1340" y1="330" x2="1260" y2="385" stroke="#7c8a9b" stroke-width="2"/>
+<line x1="1340" y1="330" x2="1420" y2="385" stroke="#7c8a9b" stroke-width="2"/>
+
+<text x="80" y="650" class="small">审核口径：产品状态以 Google Cloud TPU 产品页 / release notes 为准；结构性结论只保留官方公开内容。</text>
+</svg>

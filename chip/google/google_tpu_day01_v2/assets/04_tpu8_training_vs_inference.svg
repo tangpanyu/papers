@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="900" viewBox="0 0 1700 900">
+<style>
+text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
+.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}.h{font-size:22px;font-weight:700}.t{font-size:17px}.small{font-size:14px;fill:#5f6368}
+.card{fill:#fff;stroke:#8a94a6;stroke-width:2;rx:18}.train{fill:#eef3fd;stroke:#5f83c7;stroke-width:3;rx:18}.infer{fill:#f4eefb;stroke:#9569ad;stroke-width:3;rx:18}.mem{fill:#eaf6e8;stroke:#6d9b63;stroke-width:2;rx:10}.net{fill:#fff7e6;stroke:#c59a3d;stroke-width:2;rx:10}.comp{fill:#eaf2ff;stroke:#5f83c7;stroke-width:2;rx:10}
+</style>
+<text x="60" y="58" class="title">TPU 8 的真正变化：训练系统与推理系统开始结构性分化</text>
+<text x="60" y="92" class="sub">根据 Google 官方 TPU 8 technical deep dive / Figure 1 / Figure 4 / 规格表重绘 · teaching schematic · not to scale</text>
+
+<g transform="translate(70,145)">
+<rect width="740" height="640" class="train"/>
+<text x="35" y="45" class="h">TPU 8t · Pre-training / embedding-heavy</text>
+<text x="35" y="80" class="t">目标：高吞吐、规模化训练、提高 provisioned FLOPs utilization</text>
+<rect x="40" y="120" width="660" height="180" class="card"/>
+<text x="65" y="152" class="h">Compute path</text>
+<rect x="70" y="180" width="180" height="85" class="comp"/><text x="110" y="228" class="t">TensorCore / MXU</text>
+<rect x="280" y="180" width="180" height="85" class="comp"/><text x="315" y="215" class="t">VPU overlap</text><text x="327" y="242" class="small">quant / softmax / norm</text>
+<rect x="490" y="180" width="180" height="85" class="comp"/><text x="530" y="215" class="t">SparseCore</text><text x="518" y="239" class="small">embedding / irregular</text><text x="548" y="258" class="small">memory access</text>
+<rect x="40" y="335" width="315" height="130" class="mem"/>
+<text x="65" y="370" class="h">Memory</text>
+<text x="65" y="408" class="t">216 GB HBM</text>
+<text x="65" y="438" class="t">6.528 TB/s</text>
+<rect x="385" y="335" width="315" height="130" class="net"/>
+<text x="410" y="370" class="h">Scale-up / scale-out</text>
+<text x="410" y="408" class="t">3D torus · 9600-chip superpod</text>
+<text x="410" y="438" class="t">Virgo scale-out</text>
+<rect x="40" y="500" width="660" height="95" class="card"/>
+<text x="65" y="535" class="h">Peak FP4</text>
+<text x="210" y="535" class="t">12.6 PFLOPS</text>
+<text x="65" y="570" class="small">更多预算给吞吐、embedding、训练网络和持续喂满 MXU</text>
+</g>
+
+<g transform="translate(890,145)">
+<rect width="740" height="640" class="infer"/>
+<text x="35" y="45" class="h">TPU 8i · Sampling / Serving / Reasoning / RL</text>
+<text x="35" y="80" class="t">目标：低延迟 decode、MoE all-to-all、长上下文、collective critical path</text>
+<rect x="40" y="120" width="660" height="180" class="card"/>
+<text x="65" y="152" class="h">Compute / collective path</text>
+<rect x="70" y="180" width="175" height="85" class="comp"/><text x="100" y="228" class="t">TensorCore ×2</text>
+<rect x="282" y="180" width="175" height="85" class="comp"/><text x="328" y="215" class="t">CAE</text><text x="300" y="239" class="small">reduction /</text><text x="298" y="258" class="small">synchronization</text>
+<rect x="495" y="180" width="175" height="85" class="comp"/><text x="530" y="215" class="t">No SparseCore</text><text x="522" y="242" class="small">CAE replaces 4 SCs</text>
+<rect x="40" y="335" width="315" height="130" class="mem"/>
+<text x="65" y="370" class="h">Memory</text>
+<text x="65" y="408" class="t">288 GB HBM · 8.601 TB/s</text>
+<text x="65" y="438" class="t">384 MB on-chip SRAM</text>
+<rect x="385" y="335" width="315" height="130" class="net"/>
+<text x="410" y="370" class="h">Scale-up topology</text>
+<text x="410" y="408" class="t">Boardfly</text>
+<text x="410" y="438" class="t">更低 network diameter / all-to-all latency</text>
+<rect x="40" y="500" width="660" height="95" class="card"/>
+<text x="65" y="535" class="h">Peak FP4</text>
+<text x="210" y="535" class="t">10.1 PFLOPS</text>
+<text x="65" y="570" class="small">峰值算力低于 8t，但更多资源投到 memory / collective / latency</text>
+</g>
+
+<text x="70" y="835" class="small">关键观察：8i 不是 8t 的“低端版”。两者优化目标不同；Google 官方明确把 pre-training 与 serving/reasoning 的基础设施需求视为已分化。</text>
+</svg>
