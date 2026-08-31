@@ -27,30 +27,76 @@ GMEM --TMA--> SMEM --tcgen05.cp--> TMEM --> tcgen05 consumer
 
 ## PTX 导航（约 10 分钟）
 
-官方 PTX ISA：<https://docs.nvidia.com/cuda/parallel-thread-execution/>
+### Step 1 — 数据移动总入口
 
-先搜索 `Tensor Memory Data Movement Instructions`。PTX 在这里把
-`tcgen05.cp` 定义为 shared memory 到 Tensor Memory 的异步 copy。紧接着扫
-`Optional Decompression`：4-bit/6-bit custom floating types 可以在 copy
-过程中展开到 8-bit。
+#### 前置条件
+
+- 先把两段 copy 分开：TMA / `cp.async.bulk.tensor` 已经把所需 tile 从 GMEM 放进 SMEM；`tcgen05.cp` 接手的是下一段 SMEM→TMEM。
+- 目的 TMEM columns 已经完成 allocation，后续能够提供合法 `taddr`；本 Step 暂时不展开 producer completion 和 TMEM consumer 同步。
+
+#### 本步目的
+
+只确认 `tcgen05.cp` 在整个数据流中的方向与边界：source 是 shared memory，destination 是 Tensor Memory，而且操作是异步发起。读完不要把它误认为 GMEM→SMEM 的 TMA，也不要推断所有 MMA operand 都必须经过它。
+
+[直达 9.7.17.9 — Tensor Memory Data Movement Instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-movement-instructions)
+
+只读标题下的开头一段。PTX 在这里把 `tcgen05.cp` 定义为 shared memory 到
+Tensor Memory 的异步 copy。
 
 ``` text
 cp.async.bulk.tensor / TMA : GMEM → SMEM
 tcgen05.cp                 : SMEM → TMEM
 ```
 
-然后搜索具体 `tcgen05.cp` 指令正文。只抓
-`taddr`、`s-desc`、`shape`、`cta_group`。大量 shape
-表先不背。你要形成的结论是：destination 用 TMEM address 描述；source
-是描述 Tensor Core 所需 SMEM tile 的 descriptor，所以它天然不是
-byte-copy。
+### Step 2 — `tcgen05.cp` 指令正文
 
-最后只看 optional decompression 的第一张 4-bit→8-bit 官方示意图即可。
+#### 前置条件
+
+- SMEM 中已经存在按 Tensor Core 要求组织的 source tile，并能构造描述该矩阵的 64-bit `s-desc`；TMEM destination 已有 base `taddr`。
+- `tcgen05.cp` 是 single-thread issue：由一个线程发出 collective data movement，不要求整个 warp 像 `tcgen05.ld.sync.aligned` 那样共同执行；同一 kernel 内所有 `tcgen05` 指令仍必须使用一致的 `.cta_group`。
+
+#### 本步目的
+
+把语法中的职责严格拆开：`s-desc` 解释 SMEM source，`.shape` 规定硬件搬运 footprint，`.cta_group` 决定访问一个还是一对 CTA 的 TMEM，`[taddr]` 指向 TMEM destination。此步只说明如何发起 copy，不把“已发出”当成“consumer 已可安全使用”。
+
+[直达 9.7.17.9.2 — `tcgen05.cp`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp)
+
+从 Syntax 开始，只抓 `taddr`、`s-desc`、`shape`、`cta_group`。大量 shape
+表先不背。你要形成的结论是：destination 用 TMEM address 描述；source
+是描述 Tensor Core 所需 SMEM tile 的 descriptor，所以它天然不是 byte-copy。
+
+### Step 3 — Optional Decompression
+
+#### 前置条件
+
+- 只有指令同时指定合法的 `.src_fmt` 与 `.dst_fmt` 时，copy 才会执行格式展开；普通 dense F16/BF16 copy 不自动经过这条低比特 decompression 路径。
+- source 在 SMEM 中必须满足 PTX 对 4-bit/6-bit packed vector 及 padding 的布局约束，destination 则按 8-bit 格式落入 TMEM。
+
+#### 本步目的
+
+只建立“decompression 可以融合进 SMEM→TMEM copy”这一能力边界，并通过 Figure 194 看清 4-bit packed source 到 8-bit destination 的宽度变化。今天不计算单个编码位，也不把 optional 路径当作 `tcgen05.cp` 的通用必做步骤。
+
+[直达 9.7.17.9.1 — Optional Decompression](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-optional-decompression)
+
+只扫开头一句：4-bit/6-bit custom floating types 可以在 copy 过程中展开到
+8-bit。
+
+最后直达并只看第一张 4-bit→8-bit 官方示意图：
+[Figure 194 — Decompression from 4-bit to 8-bit](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-decompression-4b8b)。
 
 **明确跳过**：所有 4/6-bit bit-level encoding、block scaling、MMA
 instruction descriptor、CTA-pair shape 细节、完整 mbarrier 协议。
 
 ## CUTLASS 官方数据流（4 分钟）
+
+### 前置条件
+
+- PTX 三步已经确认 `tcgen05.cp` 是可选的 SMEM→TMEM 异步路径，而 TMA 负责 GMEM→SMEM。
+- 这里只观察 operand residency 与数据流，不进入具体 GEMM tile、pipeline stage 或同步实现。
+
+### 本步目的
+
+把 `tcgen05.cp` 放回完整 MMA 数据流，判断某个 operand 是以 SMEM descriptor 直接供 MMA 使用，还是先复制到 TMEM。读完要得到“是否需要 SMEM→TMEM 取决于 operand source / MMA kind / 数据格式”的边界，不能把刚学到的指令扩成所有 dense GEMM 的必经路径。
 
 <https://docs.nvidia.com/cutlass/4.5.2/media/docs/pythonDSL/mma_docs/tcgen05_programming.html>
 
@@ -66,6 +112,15 @@ MMA。因此学了 `tcgen05.cp` 不等于每个 Blackwell GEMM 都必须
 SMEM→TMEM；是否使用取决于 operand source / MMA kind / low-bit 等设计。
 
 ## CuTe 对照（约 6 分钟）
+
+### 前置条件
+
+- 已经能分别解释 PTX 的 `[taddr]`、`s-desc` 和 `.shape`，并且手上有描述 source SMEM tile 与 destination TMEM tile 的 CuTe tensors/layouts。
+- 这里的 `CopyAtom/TiledCopy` 是 collective mapping 描述；创建这些对象本身不会搬运数据。
+
+### 本步目的
+
+追清 CuTe 怎样把逻辑 tensor 分区降到合法 `tcgen05.cp`：`make_s2t_copy()` 组合 copy atom 与 TMEM layout，`get_s2t_smem_desc_tensor()` 产生硬件需要的 SMEM descriptor view，最终 copy 调用才发出指令。读完应能从 wrapper 对象反查 source、destination 与 PTX shape，而不是把 layout 当成 storage 或执行结果。
 
 进入前先知道：PTX 给的是 `taddr + s-desc + shape`；CuTe 负责把"哪个 SMEM
 tensor tile 对应哪个 TMEM tensor tile"编码成 `CopyAtom/TiledCopy`。
@@ -145,6 +200,15 @@ tl.store K/V
 
 ### Step 1：kernel 地址主路径（8 分钟）
 
+#### 前置条件
+
+- Day 2 已经生成 GPU 上的一维 `slot_mapping[num_tokens]`；`slot_mapping[token_idx]` 与当前 forward 的 `key[token_idx]`、`value[token_idx]` 指向同一个 scheduled token。
+- 本 Step 只走普通非 head-major、非 per-token-head quantization 路径，把 cache 看成 `[num_blocks, block_size, num_kv_heads, head_size]`，所有 stride 都由 wrapper 传入。
+
+#### 本步目的
+
+追完一次真实写入：每个 Triton program 先取 `token_idx` 和 `slot_idx`，负 slot 立即跳过；合法 slot 拆成 `block_idx` 与 `block_offset`，再叠加 head/dim stride 形成 K/V 目标地址，最后执行 `tl.store`。读完应能从一个 flat slot 推到 cache tensor 中的物理位置，而不需要回看 `Request` 或 `BlockPool`。
+
 搜索：
 
 ``` python
@@ -179,6 +243,15 @@ $$
 
 ### Step 2：wrapper launch contract（5 分钟）
 
+#### 前置条件
+
+- 调用方已经提供同一批 token 的 `key/value/slot_mapping`，以及实际的 `key_cache/value_cache` tensor；前三者的 token 维必须对齐。
+- kernel 不自行猜测 cache layout，所以 wrapper 必须从 tensor shape/stride 中取得 `block_size`、block/page/head stride，并选择普通 4D 或 head-major 分支。
+
+#### 本步目的
+
+确认 wrapper 怎样把 PyTorch tensor contract 降成 Triton launch contract：计算 layout 参数和二维 grid，传入所有 pointer、stride、dtype/scale 及 constexpr。读完要知道 grid 的第一维对应 `slot_mapping` 中的 token，第二维覆盖该 token 的 head×dim 数据。
+
 搜索：
 
 ``` python
@@ -190,6 +263,15 @@ def triton_reshape_and_cache_flash(
 不需要知道 `BlockPool`、`Request`、`Scheduler`。
 
 ### Step 3：backend 调用点（2 分钟）
+
+#### 前置条件
+
+- 当前走 decoder 或 cross-attention 的 KV-cache update 路径；encoder-only 分支不写 paged KV cache。
+- attention backend 已拿到本层新产生的 `key/value`、该层 `kv_cache` 和 metadata 中的 `slot_mapping`；本 Step 先看普通非 per-token-head quantization 分支。
+
+#### 本步目的
+
+把高层调用与前两步接上：backend 将统一 `kv_cache` view 拆成 `key_cache/value_cache`，再把 `key/value/cache/slot_mapping/dtype/scale` 传给 wrapper。读到调用结束就停，确认 cache-write kernel 的输入已经齐全；attention 读取和 scheduler 逻辑不在这个调用点展开。
 
 文件：`vllm/v1/attention/backends/triton_attn.py`
 

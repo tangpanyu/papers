@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+<rect x="20" y="20" width="1160" height="580" fill="white" stroke="black"/>
+<text x="50" y="60" font-size="24" font-family="sans-serif">Day 04 总结图（简化示意，非比例）</text>
+<text x="50" y="110" font-size="20" font-family="sans-serif">Blackwell: SMEM matrix descriptor → tcgen05.cp → TMEM → consumer</text>
+<rect x="60" y="145" width="230" height="90" fill="none" stroke="black"/>
+<text x="105" y="195" font-size="20" font-family="sans-serif">SMEM tile</text>
+<rect x="360" y="145" width="230" height="90" fill="none" stroke="black"/>
+<text x="385" y="180" font-size="18" font-family="sans-serif">64-bit s-desc</text>
+<text x="385" y="210" font-size="16" font-family="sans-serif">layout / stride / base</text>
+<rect x="660" y="145" width="210" height="90" fill="none" stroke="black"/>
+<text x="700" y="195" font-size="20" font-family="sans-serif">tcgen05.cp</text>
+<rect x="940" y="145" width="190" height="90" fill="none" stroke="black"/>
+<text x="985" y="195" font-size="20" font-family="sans-serif">TMEM</text>
+<path d="M290 190 L360 190 M590 190 L660 190 M870 190 L940 190" stroke="black" marker-end="url(#a)"/>
+<text x="50" y="315" font-size="20" font-family="sans-serif">vLLM: free-but-cached block → allocation pressure → evict old identity → reuse physical block</text>
+<rect x="60" y="350" width="250" height="100" fill="none" stroke="black"/>
+<text x="90" y="390" font-size="18" font-family="sans-serif">ref_cnt = 0</text>
+<text x="90" y="420" font-size="18" font-family="sans-serif">still has block_hash</text>
+<rect x="390" y="350" width="240" height="100" fill="none" stroke="black"/>
+<text x="420" y="390" font-size="18" font-family="sans-serif">get_new_blocks()</text>
+<text x="420" y="420" font-size="18" font-family="sans-serif">popleft free queue</text>
+<rect x="710" y="350" width="250" height="100" fill="none" stroke="black"/>
+<text x="735" y="390" font-size="18" font-family="sans-serif">_maybe_evict...</text>
+<text x="735" y="420" font-size="18" font-family="sans-serif">remove old hash identity</text>
+<rect x="1010" y="350" width="120" height="100" fill="none" stroke="black"/>
+<text x="1025" y="405" font-size="18" font-family="sans-serif">reuse</text>
+<path d="M310 400 L390 400 M630 400 L710 400 M960 400 L1010 400" stroke="black" marker-end="url(#a)"/>
+<text x="60" y="525" font-size="17" font-family="sans-serif">共同 invariant：物理存储可以继续存在/被复用，但旧的“解释 metadata / identity”必须在新语义接管前正确更新。</text>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="black"/></marker></defs>
+</svg>

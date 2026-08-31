@@ -21,10 +21,10 @@
 
 ## 1. 先看官方 Figure 182，不自己画 layout
 
-![NVIDIA PTX Figure 182 — Tensor Memory Layout and Addressing](https://docs.nvidia.com/cuda/parallel-thread-execution/_images/tensor-memory-layout.png)
+![NVIDIA PTX Figure 182 — Tensor Memory Layout and Addressing](assets/tensor-memory-layout.png)
 
 来源：NVIDIA PTX ISA 9.3，Figure 182 — **Tensor Memory Layout and Addressing**  
-章节：<https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-addressing>
+原图位置：[Figure 182 — Tensor Memory Layout and Addressing](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-layout)
 
 这张图只看三个事实：
 
@@ -79,7 +79,12 @@ $$
 ### 阅读范围
 
 **A. 9.7.17.1.1 — Tensor Memory Addressing**  
-<https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-addressing>
+
+**前置条件：** 已经看过 Figure 182，知道一个 CTA 的 TMEM 逻辑视图是 128 lanes × 512 columns，并且每个 `(lane, column)` 位置保存 32 bit；这里讨论的是 TMEM 专用地址编码，不套用普通 byte pointer 算术。
+
+**本步目的：** 看懂 32-bit `taddr` 怎样同时编码 lane 与 column，并确认 `0x0001_0000` 只表示 lane 字段增加 1，不表示物理地址跨过 64 KiB。此步只解决“地址怎样表示”，不解决“空间怎样申请”。
+
+[直达 9.7.17.1.1 — Tensor Memory Addressing](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-addressing)
 
 只读从：
 
@@ -92,7 +97,12 @@ Tensor Memory addresses are 32-bit wide...
 预计：**2～3 分钟**。
 
 **B. 9.7.17.1.2 — Tensor Memory Allocation**  
-<https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-allocation>
+
+**前置条件：** 已经能把 `taddr` 拆成 lane 与 column，并知道一列同时覆盖全部 128 条 TMEM lanes；因此这里的容量单位是 column，不是某个线程的一段私有字节。
+
+**本步目的：** 确认 allocation 的最小粒度、合法 `nCols` 和实际覆盖范围：申请 `nCols` columns 等于为 CTA 取得这些 columns 上的全部 lanes。此步只定义资源粒度与约束，还没有进入 `alloc/dealloc` 指令的执行和生命周期。
+
+[直达 9.7.17.1.2 — Tensor Memory Allocation](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-allocation)
 
 只读 allocation granularity 那一段。
 
@@ -107,7 +117,12 @@ allocate one column => all 128 lanes of that column
 ```
 
 **C. 9.7.17.7.1 — tcgen05.alloc/dealloc/relinquish**  
-<https://docs.nvidia.com/cuda/parallel-thread-execution/#tensorcore-5th-generation-instructions-tcgen05-alloc-tcgen05-dealloc-tcgen05-relinquish-alloc-permit>
+
+**前置条件：** 已经知道 `nCols` 表示多少 TMEM columns；还要先保留一块 CTA shared-memory 地址 `dst`，因为 `.cta_group::1` 下是一个 warp 集体执行 `tcgen05.alloc`，分配得到的 TMEM base address 会写到 `[dst]`，不是只返回给某一个线程的私有寄存器。
+
+**本步目的：** 建立完整的资源生命周期：`alloc` 阻塞等待并取得 TMEM、`dealloc` 释放某次 allocation、`relinquish_alloc_permit` 声明该 CTA 此后不再申请。读完要能解释后两者为什么不能互相替代，并记住退出 kernel 前必须释放已申请 TMEM。
+
+[直达 9.7.17.7.1 — `tcgen05.alloc/dealloc/relinquish_alloc_permit`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-alloc-dealloc-relinquish-alloc-permit)
 
 从 Syntax 开始，到 Example 1 结束。
 
@@ -126,6 +141,7 @@ tcgen05.relinquish_alloc_permit...
 - `alloc` 是 blocking；
 - allocation base 被写到 `shared::cta [dst]`；
 - kernel 退出前 allocated TMEM 必须 dealloc。
+- 同一 CTA 后续 `alloc` 的 `nCols` 不能比前一次更大，例如 `64 → 32`，不要写成 `32 → 64`。
 
 ---
 
@@ -159,6 +175,15 @@ cute.make_tensor(base, layout)
 ---
 
 ## 4. CUTLASS 阅读导航
+
+### 前置条件
+
+- PTX 部分已经给出真实资源模型：`TmemAllocator.allocate()` 最终必须对应合法的 TMEM column allocation，base `taddr` 来自这次 allocation。
+- `make_fragment_C()` 先产生 accumulator 的逻辑 fragment/layout；此时只有坐标关系，没有把 accumulator 放进寄存器或 TMEM storage。
+
+### 本步目的
+
+只追清 `logical layout -> allocate columns -> retrieve base pointer -> bind storage and layout` 这条链。读到 `cute.make_tensor(tmem_ptr, tCtAcc.layout)` 时，应能说明：前一个 `tCtAcc` 是逻辑 fragment 描述，重新绑定后才是以真实 TMEM allocation 为 backing storage 的 tensor view。
 
 官方 guide：  
 <https://docs.nvidia.com/cutlass/4.5.2/media/docs/pythonDSL/mma_docs/tcgen05_programming.html>
@@ -222,7 +247,7 @@ tCtAcc = cute.make_tensor(tmem_ptr, tCtAcc.layout)
 
 ### Figure 7：第一次把 KV 写进 paged memory
 
-![vLLM Figure 7 — Prefix caching populate KVs](https://vllm.ai/blog-assets/figures/2025-vllm-anatomy/prefix_pt2.png)
+![vLLM Figure 7 — Prefix caching populate KVs](assets/prefix_pt2.png)
 
 来源：vLLM 官方博客《Inside vLLM: Anatomy of a High-Throughput LLM Inference System》，Figure 7  
 <https://vllm.ai/blog/2025-09-05-anatomy-of-vllm>
@@ -244,7 +269,7 @@ physical KV blocks
 
 ### Figure 8：旧 request 已结束，block 仍然能被 prefix hit
 
-![vLLM Figure 8 — Prefix caching reuse KVs](https://vllm.ai/blog-assets/figures/2025-vllm-anatomy/prefix_pt3.png)
+![vLLM Figure 8 — Prefix caching reuse KVs](assets/prefix_pt3.png)
 
 这张图今天最重要。
 
@@ -273,8 +298,8 @@ block_id
 ref_cnt
     当前 active requests 的引用数
 
-block_hash
-    这块内容是否拥有可查找的 prefix-cache identity
+_block_hash / block_hash property
+    `_block_hash` 保存 prefix-cache identity，`block_hash` property 提供只读访问
 
 prev_free_block / next_free_block
     该 block 在 free/eviction queue 中的位置
@@ -358,32 +383,46 @@ ref_cnt == 0 && block_hash != None
 Commit：  
 <https://github.com/vllm-project/vllm/commit/80771bbbddf9e5153eea3aca8055049ee5aaaed1>
 
-总阅读量约 **120 行有效代码/注释**，预计 **15～18 分钟**。
+总阅读量约 **147 行有效代码/注释**，预计 **18～20 分钟**。
 
 ---
 
 ## Step 1 — 只看 `KVCacheBlock` 字段
+
+### 前置条件
+
+- 先把 `KVCacheBlock` 当作 CPU 侧 physical KV block 的元数据对象，不是 GPU 上真正保存 K/V 的 tensor。
+- 同一个 physical `block_id` 同时参与两套生命周期：active request ownership 用 `ref_cnt` 表示，prefix-cache identity 用 `_block_hash` / `block_hash` 表示。
+
+### 本步目的
+
+确认每个字段各回答什么问题：`block_id` 标识物理块，`ref_cnt` 记录当前活跃引用，`block_hash` 记录可命中的 prefix identity，双向链表指针记录它在 free queue 中的位置。读完要接受合法状态 `ref_cnt == 0 && block_hash is not None`，暂时不追这些字段由谁修改。
 
 文件：
 
 `vllm/v1/core/kv_cache_utils.py`
 
 固定链接：  
-<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/kv_cache_utils.py#L146-L165>
+<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/kv_cache_utils.py#L161-L190>
 
 ### 读
 
-`L146-L165`，约 20 行。
+`L161-L190`，约 30 行。
 
 ### 停
 
-看到：
+读完这个 property：
 
 ```python
-is_null: bool = False
+@property
+def block_hash_num_tokens(self) -> int | None:
+    return self._block_hash_num_tokens
 ```
 
 就停。
+
+这里要分清：字段实际名是 `_block_hash`，外部通常通过只读的
+`block_hash` property 访问它。
 
 ### 不要读
 
@@ -397,11 +436,20 @@ is_null: bool = False
 
 ## Step 2 — 只看 free queue 的设计说明，不读完整实现
 
+### 前置条件
+
+- Step 1 已经知道 free-list 指针直接存在 `KVCacheBlock` 中。
+- `ref_cnt == 0` 表示 block 当前没有 active owner、可作为重新分配候选，但它仍可能保留 prefix-cache hash，因此“在 free queue”不等于“内容无效”。
+
+### 本步目的
+
+理解为什么这里需要 intrusive doubly linked list：prefix hit 的 `touch()` 必须能在 O(1) 时间从队列中间移除某个 block；同时队列前后位置承载复用/淘汰优先级。此步只认设计 contract，不进入 `popleft_n/remove/append_n` 的链表实现。
+
 同一文件：
 
-<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/kv_cache_utils.py#L206-L221>
+<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/kv_cache_utils.py#L228-L248>
 
-只读 `FreeKVCacheBlockQueue` 的 docstring，约 16 行。
+只读 `FreeKVCacheBlockQueue` 的 docstring，约 21 行。
 
 你需要知道两件事：
 
@@ -414,11 +462,20 @@ is_null: bool = False
 
 ## Step 3 — 真正读 allocation
 
+### 前置条件
+
+- `BlockPool` 已经创建好全部 `KVCacheBlock`、free queue 和 prefix hash 索引，并且 `get_num_free_blocks() >= num_blocks`。
+- `get_new_blocks()` 接收的是本轮需要取得的 block 数量；它不在这里查询 prefix cache，也不新建 GPU KV tensor，而是复用 pool 中已有的 physical block IDs。
+
+### 本步目的
+
+看清一次真正的 ownership 转移：从 free queue 取出候选；若候选还带旧 cache identity，就先从 hash 索引删除并 `reset_hash()`；确认 `ref_cnt == 0` 后再递增为新 owner 使用。读完应能解释为什么“清旧 hash”必须发生在 physical block 被重新赋予新语义之前。
+
 文件：
 
 `vllm/v1/core/block_pool.py`
 
-<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L597-L646>
+<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L647-L700>
 
 读：
 
@@ -427,7 +484,7 @@ get_new_blocks()
 _maybe_evict_cached_block()
 ```
 
-约 50 行。
+约 54 行。
 
 ### 阅读时删掉脑子里的噪音
 
@@ -456,9 +513,18 @@ ref_cnt += 1
 
 ## Step 4 — 读 cache hit 与 free
 
+### 前置条件
+
+- `touch(blocks)` 的输入是 prefix lookup 已经命中的 blocks；其中某个 block 可能仍被 active request 使用，也可能因 `ref_cnt == 0` 正待在 free queue。
+- `free_blocks(ordered_blocks)` 的输入仍带当前 request 的引用，并且调用方已经按 eviction priority 排好顺序；这里负责减少 ownership，不负责销毁 GPU storage。
+
+### 本步目的
+
+把两个反向状态变化接起来：`touch()` 在命中 cached-free block 时先把它移出 free queue，再增加 `ref_cnt`；`free_blocks()` 先减少 `ref_cnt`，归零后按是否 cached 放到 queue 的不同端。读完要能说明 `free` 只表示“可重新分配”，旧 hash 会一直保留到真正复用/eviction 时。
+
 同一文件：
 
-<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L647-L684>
+<https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L702-L743>
 
 只读：
 
@@ -467,7 +533,7 @@ touch()
 free_blocks()
 ```
 
-约 38 行。
+约 42 行。
 
 ### `touch()` 只回答
 

@@ -2,6 +2,15 @@
 
 这版重点不是增加内容，而是严格控制阅读边界。
 
+## 源码阅读节点统一规格
+
+`ai_infra/` 下各学习正文的 PTX、CUTLASS/CuTe 与 vLLM 源码阅读节点统一按下面顺序组织：
+
+1. **前置条件**：直接放在对应 Step / 精确阅读条目下面，只写进入该段源码前必须已经成立的输入、状态和简化条件。
+2. **本步目的**：紧跟前置条件，明确该段只完成什么、产出什么，以及哪些问题不在本步解决。
+3. **原阅读范围**：随后保留直达链接、搜索词、代码范围、跳过项和自检，不把补充说明集中追加到文档末尾。
+4. **图示**：保留 Markdown/Mermaid；本地图片统一放在相邻 `assets/` 目录并使用相对路径。
+
 ## 源码版本
 
 vLLM pinned commit:
@@ -28,17 +37,4 @@ Day 2:
 
 ## 图片
 
-Markdown 直接引用以下官方原图 URL，以保证使用原图而非自绘替代：
-
-- NVIDIA PTX Figure 182:
-  https://docs.nvidia.com/cuda/parallel-thread-execution/_images/tensor-memory-layout.png
-- NVIDIA PTX Figure 183:
-  https://docs.nvidia.com/cuda/parallel-thread-execution/_images/tcgen05-mma-fragment-3232b.png
-- vLLM Figure 7:
-  https://vllm.ai/blog-assets/figures/2025-vllm-anatomy/prefix_pt2.png
-- vLLM Figure 8:
-  https://vllm.ai/blog-assets/figures/2025-vllm-anatomy/prefix_pt3.png
-- vLLM Figure 4:
-  https://vllm.ai/blog-assets/figures/2025-vllm-anatomy/fwd_pass.png
-
-当前执行容器无外网 DNS，因此无法把原图 bytes 物理落到 `assets/`；Typora 联网打开 Markdown 时会直接拉取官方图片。
+所有嵌入图片都已保存到 [`assets/`](assets/)，Markdown 使用相对路径，不依赖联网加载。图片文件与官方来源的对应关系见 [`assets/README.md`](assets/README.md)。
