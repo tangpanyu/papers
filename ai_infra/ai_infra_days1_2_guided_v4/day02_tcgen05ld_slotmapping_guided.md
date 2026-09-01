@@ -55,6 +55,11 @@ PTX `9.7.17.8.1 Access restrictions`：
 | 2 | 64–95 |
 | 3 | 96–127 |
 
+<p align="center">
+  <img src="assets/tcgen05-data-path-layout-d1.png" alt="NVIDIA PTX Figure 211 — Layout organization for M = 128 and warp-rank modulo 4" width="49%" />
+  <img src="assets/tcgen05-data-path-layout-d2.png" alt="NVIDIA PTX Figure 212 — Addresses used by tcgen05.ld/st for the M = 128 layout" width="49%" />
+</p>
+
 但四个 warp 都可以访问全部 columns。
 
 所以：
@@ -85,6 +90,16 @@ taddr column + instruction shape
 
 先确定“当前 warp 合法访问哪 32 条 TMEM lanes”。读完只需要得到 `warpgroup 内位置 -> TMEM lane 范围` 的映射；这一节不负责解释 `taddr`、fragment shape，也不能单凭它推出计算 warp 必须排在 CTA 的前 4 个。
 
+### 你要回答
+
+如果 CTA 有 6 个 warp，`warp_id = 4` 的 warp 属于哪个 warpgroup、在该 warpgroup 中的编号是什么、因此能访问哪 32 条 TMEM lanes？
+
+```text
+回答：
+
+标准答案：
+```
+
 [直达 9.7.17.8.1 — Access restrictions](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-tensor-memory-ld-st-access-restrictions)
 
 从：
@@ -112,6 +127,18 @@ Not all threads of the CTA...
 
 确定一次 collective load/store 的形状以及每个线程需要多少个 `.b32` 寄存器。对 `.32x32b`，一个 warp 访问 32 条 TMEM lanes；`.x1` 时每条 lane 搬 32 bit、每线程对应 1 个 `.b32` 寄存器，`.x2` 时重复两次、每线程对应 2 个 `.b32` 寄存器。这里建立的是 TMEM fragment 与 warp 线程寄存器的分发关系，并没有分配 TMEM 或寄存器。
 
+### 你要回答
+
+为什么 Figure 183 不能理解成“thread `i` 永远读取 TMEM lane `i`”？`.32x32b.x2` 相比 `.x1`，整个 warp 额外覆盖的是哪一个维度？
+
+```text
+回答：
+
+标准答案：
+```
+
+![NVIDIA PTX Figure 193 — Pack/unpack operations for tcgen05 ld/st](assets/tcgen05-ld-st-pack-unpack.png)
+
 [直达 9.7.17.2.3.1.1 — Matrix fragments for shape `.32x32b`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-fragments-shape-3232b)
 
 从：
@@ -126,9 +153,12 @@ A tcgen05{.ld,.st}.32x32b instruction...
 
 你要回答：
 
+`.x1` 与 `.x2` 对每线程寄存器数量有什么变化？
+
 ```text
-.x1 与 .x2 对每线程寄存器数量有什么变化？
 回答：x1和x2的区别就是寄存器的数量区别，在TMEM中表现位col的倍数
+
+标准答案：
 ```
 
 ---
@@ -144,6 +174,16 @@ A tcgen05{.ld,.st}.32x32b instruction...
 ### 本步目的
 
 把语法中的三个东西连起来：共同的 `[taddr]` 决定 collective base，`.shape.num` 决定搬运范围，`{r0, r1, ...}` 接收各线程分到的结果。`tcgen05.ld` 的指令接口就是 **TMEM -> 寄存器**，不能把目标直接写成 shared memory；若后续确实需要 SMEM，还要再执行一次寄存器到 SMEM 的 store。
+
+### 你要回答
+
+为什么 32 个线程可以共同完成一次 `tcgen05.ld`，但 32 个线程不能各自传入不同的 `taddr`？如果目标必须落到 SMEM，中间还缺哪一步？
+
+```text
+回答：
+
+标准答案：
+```
 
 [直达 9.7.17.8.3 — `tcgen05.ld`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-ld)
 
@@ -195,6 +235,16 @@ one warp
 
 确认 `tcgen05.wait::ld` 等待的是“当前执行线程此前发出的所有 `tcgen05.ld` 完成”，从而阻止后续操作越过尚未完成的 TMEM 读取并产生 anti-dependency hazard。它不是用来等待更早的 `tcgen05.mma` 生产数据；同线程后续直接使用目标寄存器时，真实寄存器依赖本身会保持次序，但不会代替这里需要的 TMEM 内存次序。
 
+### 你要回答
+
+若代码顺序是 `tcgen05.ld [taddr] -> tcgen05.mma [taddr]`，`tcgen05.wait::ld` 解决的具体竞争是什么？它等待的是 `mma` 的完成，还是 `ld` 的完成？
+
+```text
+回答：
+
+标准答案：
+```
+
 [直达 9.7.17.8.5 — `tcgen05.wait`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-wait)
 
 PTX 指出：
@@ -224,6 +274,16 @@ flowchart LR
 ### 本步目的
 
 把 CuTe 抽象逐层映射回 PTX：`Ld32x32bOp` 选择硬件 load shape/repetition，`make_tmem_copy()` 建立 collective tiled copy，`get_slice(tidx)` 取得当前线程视图，`partition_S/partition_D` 生成对应分区，最后 `cute.copy()` 才真正发出 TMEM→RMEM 搬运。读完要能区分 layout/partition 构造与实际数据移动。
+
+### 你要回答
+
+在这段 CuTe 代码中，哪一行只是构造 copy/layout 视图，哪一行才真正触发 TMEM→RMEM 的数据搬运？
+
+```text
+回答：
+
+标准答案：
+```
 
 官方 guide：  
 <https://docs.nvidia.com/cutlass/4.5.2/media/docs/pythonDSL/mma_docs/tcgen05_programming.html>
@@ -463,6 +523,16 @@ BLOCKS_PER_KV_BLOCK = 1
 
 只认清三个容器的形状、粒度和生命周期：二维 `block_table[row, logical_block]` 保存 request 到 physical block 的映射，`num_blocks_per_row[row]` 保存该行当前有效长度，一维 `slot_mapping[token_idx]` 是本轮 scheduled tokens 的输出缓冲区。构造函数只是在预分配容器，此时还没有把 request 的 `block_ids` 写入行，也没有计算任何 token slot。
 
+### 你要回答
+
+为什么 `block_table` 要按 request 组织成二维，而 `slot_mapping` 只需按本轮 flattened token 组织成一维？分别说出它们的生命周期。
+
+```text
+回答：
+
+标准答案：
+```
+
 <https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/worker/block_table.py#L57-L128>
 
 ### 实际读
@@ -492,7 +562,12 @@ self.slot_mapping = ...
 block_table 是二维
 slot_mapping 是一维
 
+```
+
+```text
 回答：因为block_table是存储一个最大的能够并行处理的req，而slog_mapping是处理一个req的token 物理slot和逻辑slot。
+
+标准答案：
 ```
 
 ---
@@ -507,6 +582,16 @@ slot_mapping 是一维
 ### 本步目的
 
 把 allocator 给出的 physical block IDs 写成 `block_table[row_idx, logical_block] = physical_block_id`。`add_row()` 先把有效长度归零再写整行，`append_row()` 从当前有效长度后继续追加；本 Step 只形成 CPU 侧 request-level page table，还没有按 token 计算 `slot_mapping`，也没有写 K/V 数据。
+
+### 你要回答
+
+同一个 `row_idx` 已有 2 个 block 时，调用 `append_row([7, 8], row_idx)` 与调用 `add_row([7, 8], row_idx)` 的结果有什么区别？
+
+```text
+回答：
+
+标准答案：
+```
 
 <https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/worker/block_table.py#L157-L177>
 
@@ -538,6 +623,16 @@ block_ids
 ### 本步目的
 
 确认 Python wrapper 只做路径选择和参数转发：`NONE` 模式直接返回；普通 KV 的 `TOKEN_TO_KV_SLOT` 模式根据 `positions.shape[0]` 得到 `num_tokens`，再把边界、位置、GPU block table 和 block-size 参数交给 Triton kernel。`position // block_size` 和最终 slot 公式不在 wrapper 中执行。
+
+### 你要回答
+
+如果 `slot_mapping_mode == SlotMappingMode.NONE`，`compute_slot_mapping()` 为什么可以直接返回？这条路径的 `block_table` 还可能被谁当作 state/index 使用？
+
+```text
+回答：
+
+标准答案：
+```
 
 <https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/worker/block_table.py#L201-L229>
 
@@ -579,6 +674,16 @@ request -> state/block ID
 ### 本步目的
 
 对每个 scheduled token 完成 `position -> logical block/offset -> physical block -> flat KV slot`。输出的 `slot_mapping[i]` 告诉后续 KV-cache 写入逻辑：本轮第 `i` 个 token 的 K/V 应落到哪一个物理 slot。
+
+### 你要回答
+
+在单卡普通路径下，若 `block_size = 16`、某 token 的 `position = 34`，且该 request 的 `block_table` 第 2 个 logical block 存的是 physical block `12`，最终 `slot_mapping` 应是多少？
+
+```text
+回答：
+
+标准答案：
+```
 
 <https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/worker/block_table.py#L442-L475>
 
@@ -694,6 +799,12 @@ current token -> flat physical slot
 3. 单卡普通路径下，kernel 的哪几行真正组成 `position → slot`？
 4. 为什么 Mamba/GDN 可以保留 block/state index，却直接 `SlotMappingMode.NONE`？
 
+```text
+回答：
+
+标准答案：
+```
+
 答完就停，不继续追 attention backend。
 
 ---
@@ -702,7 +813,10 @@ current token -> flat physical slot
 
 ## 口述题：`block_table` 与 `slot_mapping` 为什么都要存在？
 
-### 标准答案
+```text
+回答：
+
+标准答案：
 
 `block_table` 描述 request 的 logical-block→physical-block ownership/mapping，是跨 execution step 维护的 request-level metadata。
 
@@ -714,12 +828,19 @@ current token -> flat physical slot
 - scheduler 每轮只生成当前 token 需要的执行 metadata；
 - kernel 不必理解 request-level allocator 状态；
 - recurrent state 类型还可以复用 request→storage ID，而跳过 token-level slot mapping。
+```
 
 ---
 
 ## 手撕：LeetCode 560 — Subarray Sum Equals K
 
 要求：$O(n)$。
+
+```text
+回答：
+
+标准答案：
+```
 
 ```cpp
 #include <unordered_map>

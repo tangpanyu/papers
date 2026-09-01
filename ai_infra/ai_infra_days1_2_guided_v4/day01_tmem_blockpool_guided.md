@@ -32,6 +32,14 @@
 - 每个 lane 横向 512 columns，共 `2 KiB`；
 - `taddr` 是 32-bit 编码：高 16 bit 是 lane index，低 16 bit 是 column index。
 
+**你要回答：** 如果一个 kernel 只拿到 `taddr = 0x0002_0007`，你会怎样拆出 lane 和 column？这个编码为什么只能用于 TMEM 指令，不能直接传给普通 global/shared-memory load？
+
+```text
+回答：
+
+标准答案：
+```
+
 PTX 的地址编码可以写成：
 
 $$
@@ -76,6 +84,12 @@ $$
 2. `tcgen05.alloc 128` 到底申请了什么？
 3. `dealloc` 与 `relinquish_alloc_permit` 为什么不是一件事？
 
+```text
+回答：
+
+标准答案：
+```
+
 ### 阅读范围
 
 **A. 9.7.17.1.1 — Tensor Memory Addressing**  
@@ -83,6 +97,14 @@ $$
 **前置条件：** 已经看过 Figure 182，知道一个 CTA 的 TMEM 逻辑视图是 128 lanes × 512 columns，并且每个 `(lane, column)` 位置保存 32 bit；这里讨论的是 TMEM 专用地址编码，不套用普通 byte pointer 算术。
 
 **本步目的：** 看懂 32-bit `taddr` 怎样同时编码 lane 与 column，并确认 `0x0001_0000` 只表示 lane 字段增加 1，不表示物理地址跨过 64 KiB。此步只解决“地址怎样表示”，不解决“空间怎样申请”。
+
+**你要回答：** 如果 `lane = 3`、`column = 5`，编码后的 `taddr` 数值是多少？为什么这个数不能当作普通 byte address 去加减？
+
+```text
+回答：
+
+标准答案：
+```
 
 [直达 9.7.17.1.1 — Tensor Memory Addressing](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-addressing)
 
@@ -101,6 +123,14 @@ Tensor Memory addresses are 32-bit wide...
 **前置条件：** 已经能把 `taddr` 拆成 lane 与 column，并知道一列同时覆盖全部 128 条 TMEM lanes；因此这里的容量单位是 column，不是某个线程的一段私有字节。
 
 **本步目的：** 确认 allocation 的最小粒度、合法 `nCols` 和实际覆盖范围：申请 `nCols` columns 等于为 CTA 取得这些 columns 上的全部 lanes。此步只定义资源粒度与约束，还没有进入 `alloc/dealloc` 指令的执行和生命周期。
+
+**你要回答：** `tcgen05.alloc ... , 128` 实际取得多少个 32-column allocation units？每个被申请的 column 覆盖多少条 TMEM lanes？
+
+```text
+回答：
+
+标准答案：
+```
 
 [直达 9.7.17.1.2 — Tensor Memory Allocation](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory-allocation)
 
@@ -121,6 +151,14 @@ allocate one column => all 128 lanes of that column
 **前置条件：** 已经知道 `nCols` 表示多少 TMEM columns；还要先保留一块 CTA shared-memory 地址 `dst`，因为 `.cta_group::1` 下是一个 warp 集体执行 `tcgen05.alloc`，分配得到的 TMEM base address 会写到 `[dst]`，不是只返回给某一个线程的私有寄存器。
 
 **本步目的：** 建立完整的资源生命周期：`alloc` 阻塞等待并取得 TMEM、`dealloc` 释放某次 allocation、`relinquish_alloc_permit` 声明该 CTA 此后不再申请。读完要能解释后两者为什么不能互相替代，并记住退出 kernel 前必须释放已申请 TMEM。
+
+**你要回答：** 一个 CTA 先 `alloc` 再 `dealloc`，和执行 `relinquish_alloc_permit` 分别改变了什么状态？如果只执行 `relinquish_alloc_permit` 而不 `dealloc`，已申请的 TMEM 会不会自动释放？
+
+```text
+回答：
+
+标准答案：
+```
 
 [直达 9.7.17.7.1 — `tcgen05.alloc/dealloc/relinquish_alloc_permit`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-alloc-dealloc-relinquish-alloc-permit)
 
@@ -185,6 +223,16 @@ cute.make_tensor(base, layout)
 
 只追清 `logical layout -> allocate columns -> retrieve base pointer -> bind storage and layout` 这条链。读到 `cute.make_tensor(tmem_ptr, tCtAcc.layout)` 时，应能说明：前一个 `tCtAcc` 是逻辑 fragment 描述，重新绑定后才是以真实 TMEM allocation 为 backing storage 的 tensor view。
 
+### 你要回答
+
+`make_fragment_C()` 和 `cute.make_tensor(tmem_ptr, tCtAcc.layout)` 中，哪一步建立逻辑 layout，哪一步把真实 TMEM storage 绑定进来？
+
+```text
+回答：
+
+标准答案：
+```
+
 官方 guide：  
 <https://docs.nvidia.com/cutlass/4.5.2/media/docs/pythonDSL/mma_docs/tcgen05_programming.html>
 
@@ -221,6 +269,12 @@ tCtAcc = cute.make_tensor(tmem_ptr, tCtAcc.layout)
 1. `make_fragment_C` 与 `TmemAllocator.allocate` 的职责各是什么？
 2. 为什么 base pointer 与 layout 要到最后才能组成 `tCtAcc`？
 3. 为什么 `alloc` 返回结果经由 SMEM，而不是只放某线程私有寄存器？
+
+```text
+回答：
+
+标准答案：
+```
 
 ---
 
@@ -267,6 +321,14 @@ physical KV blocks
 
 关键点：`KVCacheBlock` 是 **管理对象**，不是 GPU KV tensor 本身。
 
+**你要回答：** Figure 7 中同一个 `block_id` 为什么要同时出现在 CPU metadata 和 GPU physical KV block 两侧？如果只保留其中一侧，哪条映射会丢失？
+
+```text
+回答：
+
+标准答案：
+```
+
 ### Figure 8：旧 request 已结束，block 仍然能被 prefix hit
 
 ![vLLM Figure 8 — Prefix caching reuse KVs](assets/prefix_pt3.png)
@@ -283,9 +345,19 @@ request ownership lifetime
 cached-content lifetime
 ```
 
+**你要回答：** Figure 8 里 request 结束后，为什么 `ref_cnt` 可以变成 0，但第二条 request 仍能通过旧 hash 找回同一个 physical block？
+
+```text
+回答：
+
+标准答案：
+```
+
 ---
 
 # 2. 源码阅读前置数据结构
+
+![vLLM Figure 3 — KV cache block allocation](assets/kv_cache_blocks.png)
 
 今天只认 4 个东西。
 
@@ -398,6 +470,18 @@ Commit：
 
 确认每个字段各回答什么问题：`block_id` 标识物理块，`ref_cnt` 记录当前活跃引用，`block_hash` 记录可命中的 prefix identity，双向链表指针记录它在 free queue 中的位置。读完要接受合法状态 `ref_cnt == 0 && block_hash is not None`，暂时不追这些字段由谁修改。
 
+### 你要回答
+
+`ref_cnt == 0 && block_hash != None` 时，这个 block 是“可被新内容直接覆盖”，还是“可以被 prefix hit 重新取回”？为什么？
+
+```text
+回答：
+
+标准答案：
+```
+
+![vLLM Figure 6 — Prefix caching hash function](assets/prefix_pt1.png)
+
 文件：
 
 `vllm/v1/core/kv_cache_utils.py`
@@ -432,6 +516,12 @@ def block_hash_num_tokens(self) -> int | None:
 
 为什么一个 block 同时需要 `ref_cnt` 和 `block_hash`？
 
+```text
+回答：
+
+标准答案：
+```
+
 ---
 
 ## Step 2 — 只看 free queue 的设计说明，不读完整实现
@@ -444,6 +534,16 @@ def block_hash_num_tokens(self) -> int | None:
 ### 本步目的
 
 理解为什么这里需要 intrusive doubly linked list：prefix hit 的 `touch()` 必须能在 O(1) 时间从队列中间移除某个 block；同时队列前后位置承载复用/淘汰优先级。此步只认设计 contract，不进入 `popleft_n/remove/append_n` 的链表实现。
+
+### 你要回答
+
+prefix hit 命中 free queue 中间的一个 cached block 时，为什么不能只做 `ref_cnt += 1`，还必须把它从队列摘掉？
+
+```text
+回答：
+
+标准答案：
+```
 
 同一文件：
 
@@ -470,6 +570,16 @@ def block_hash_num_tokens(self) -> int | None:
 ### 本步目的
 
 看清一次真正的 ownership 转移：从 free queue 取出候选；若候选还带旧 cache identity，就先从 hash 索引删除并 `reset_hash()`；确认 `ref_cnt == 0` 后再递增为新 owner 使用。读完应能解释为什么“清旧 hash”必须发生在 physical block 被重新赋予新语义之前。
+
+### 你要回答
+
+对一个 `ref_cnt == 0` 且仍有 `block_hash` 的候选，`get_new_blocks()` 为什么必须先 `_maybe_evict_cached_block()`，再执行 `ref_cnt += 1`？
+
+```text
+回答：
+
+标准答案：
+```
 
 文件：
 
@@ -522,6 +632,16 @@ ref_cnt += 1
 
 把两个反向状态变化接起来：`touch()` 在命中 cached-free block 时先把它移出 free queue，再增加 `ref_cnt`；`free_blocks()` 先减少 `ref_cnt`，归零后按是否 cached 放到 queue 的不同端。读完要能说明 `free` 只表示“可重新分配”，旧 hash 会一直保留到真正复用/eviction 时。
 
+### 你要回答
+
+同一个 block 分别走 `touch()` 和 `free_blocks()` 时，`ref_cnt`、free queue 位置和 `block_hash` 各会怎样变化？
+
+```text
+回答：
+
+标准答案：
+```
+
 同一文件：
 
 <https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L702-L743>
@@ -546,6 +666,12 @@ if block.ref_cnt == 0:
 
 必须发生在 `ref_cnt += 1` 附近？
 
+```text
+回答：
+
+标准答案：
+```
+
 ### `free_blocks()` 只回答
 
 当前版本为什么把：
@@ -556,6 +682,12 @@ cached blocks     -> append
 ```
 
 分开？
+
+```text
+回答：
+
+标准答案：
+```
 
 源码注释已经给出：
 
@@ -589,6 +721,12 @@ flowchart LR
 3. allocator 拿到一个仍有 hash 的 free block 时为什么必须先 evict identity？
 4. 为什么 cached 与 non-cached free block 的 queue placement 不一样？
 
+```text
+回答：
+
+标准答案：
+```
+
 如果这 4 个能回答，今天 KV 部分就完成，不再继续追 `KVCacheManager`。
 
 ---
@@ -597,7 +735,10 @@ flowchart LR
 
 ## 口述题：TMEM allocation 为什么会参与 occupancy / deadlock reasoning？
 
-### 标准答案
+```text
+回答：
+
+标准答案：
 
 `tcgen05.alloc` 不是普通编译期静态地址计算，而是运行时、可能 blocking 的 TMEM resource allocation。一个 CTA 要等待 SM 上出现足够 TMEM columns 才能继续，因此 kernel 的可驻留 CTA 数除了 register/SMEM 之外还受到 TMEM allocation 约束。
 
@@ -605,21 +746,26 @@ flowchart LR
 
 工程上因此要同时看：
 
-```text
 SMEM
 register
 TMEM columns
 CTA role / residency
 allocation / deallocation ordering
-```
 
 而不能只按传统 occupancy 表判断。
+```
 
 ---
 
 ## 手撕：CUDA warp stable softmax（32 个元素）
 
 要求：一个 warp 正好处理 32 个 `float`，每线程一个元素，原地输出 softmax。
+
+```text
+回答：
+
+标准答案：
+```
 
 ```cpp
 __device__ __forceinline__
@@ -658,6 +804,12 @@ __global__ void warp_softmax32(float* x) {
 - 为什么先减 max？
 - `__shfl_sync(mask, x, 0)` 在这里为什么必要？
 - 如果元素数不是 32，mask/neutral value 要怎么改？
+
+```text
+回答：
+
+标准答案：
+```
 
 ---
 

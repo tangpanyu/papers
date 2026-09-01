@@ -38,6 +38,16 @@ GMEM --TMA--> SMEM --tcgen05.cp--> TMEM --> tcgen05 consumer
 
 只确认 `tcgen05.cp` 在整个数据流中的方向与边界：source 是 shared memory，destination 是 Tensor Memory，而且操作是异步发起。读完不要把它误认为 GMEM→SMEM 的 TMA，也不要推断所有 MMA operand 都必须经过它。
 
+#### 你要回答
+
+把 `GMEM --TMA--> SMEM --tcgen05.cp--> TMEM` 中的两次搬运分别写出 source、destination 和发起者；为什么 `tcgen05.cp` 不能替代前面的 TMA？
+
+```text
+回答：不知道，这里没说，我猜测可能还是多级cache的原因是一样的，因为smem更大复用率更高，会提升计算密度，而TMEM太小，频繁的读取导致计算密度低。
+
+标准答案：
+```
+
 [直达 9.7.17.9 — Tensor Memory Data Movement Instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-movement-instructions)
 
 只读标题下的开头一段。PTX 在这里把 `tcgen05.cp` 定义为 shared memory 到
@@ -59,6 +69,16 @@ tcgen05.cp                 : SMEM → TMEM
 
 把语法中的职责严格拆开：`s-desc` 解释 SMEM source，`.shape` 规定硬件搬运 footprint，`.cta_group` 决定访问一个还是一对 CTA 的 TMEM，`[taddr]` 指向 TMEM destination。此步只说明如何发起 copy，不把“已发出”当成“consumer 已可安全使用”。
 
+#### 你要回答
+
+在 `tcgen05.cp.cta_group::1.128x256b [taddr], s-desc` 中，哪个 operand 描述 SMEM 源矩阵，哪个 operand 指向 TMEM 目的地？`.shape` 与 `s-desc` 为什么不能互换职责？
+
+```text
+回答：
+
+标准答案：
+```
+
 [直达 9.7.17.9.2 — `tcgen05.cp`](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp)
 
 从 Syntax 开始，只抓 `taddr`、`s-desc`、`shape`、`cta_group`。大量 shape
@@ -76,6 +96,16 @@ tcgen05.cp                 : SMEM → TMEM
 
 只建立“decompression 可以融合进 SMEM→TMEM copy”这一能力边界，并通过 Figure 194 看清 4-bit packed source 到 8-bit destination 的宽度变化。今天不计算单个编码位，也不把 optional 路径当作 `tcgen05.cp` 的通用必做步骤。
 
+#### 你要回答
+
+什么条件下 `tcgen05.cp` 才会做 4/6-bit 到 8-bit 的 decompression？普通 F16/BF16 的 SMEM→TMEM copy 是否自动走这条路径？
+
+```text
+回答：
+
+标准答案：
+```
+
 [直达 9.7.17.9.1 — Optional Decompression](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-optional-decompression)
 
 只扫开头一句：4-bit/6-bit custom floating types 可以在 copy 过程中展开到
@@ -83,6 +113,8 @@ tcgen05.cp                 : SMEM → TMEM
 
 最后直达并只看第一张 4-bit→8-bit 官方示意图：
 [Figure 194 — Decompression from 4-bit to 8-bit](https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-decompression-4b8b)。
+
+![NVIDIA PTX Figure 194 — Decompression from 4-bit to 8-bit](assets/tcgen05-decompression-4b8b.png)
 
 **明确跳过**：所有 4/6-bit bit-level encoding、block scaling、MMA
 instruction descriptor、CTA-pair shape 细节、完整 mbarrier 协议。
@@ -97,6 +129,16 @@ instruction descriptor、CTA-pair shape 细节、完整 mbarrier 协议。
 ### 本步目的
 
 把 `tcgen05.cp` 放回完整 MMA 数据流，判断某个 operand 是以 SMEM descriptor 直接供 MMA 使用，还是先复制到 TMEM。读完要得到“是否需要 SMEM→TMEM 取决于 operand source / MMA kind / 数据格式”的边界，不能把刚学到的指令扩成所有 dense GEMM 的必经路径。
+
+### 你要回答
+
+在 `A/B: GMEM → SMEM → MMA` 与 `C/D: TMEM → RMEM → GMEM` 两条路径中，哪一条默认不需要 `tcgen05.cp`？什么条件会让 operand 额外经过 SMEM→TMEM？
+
+```text
+回答：
+
+标准答案：
+```
 
 <https://docs.nvidia.com/cutlass/4.5.2/media/docs/pythonDSL/mma_docs/tcgen05_programming.html>
 
@@ -121,6 +163,16 @@ SMEM→TMEM；是否使用取决于 operand source / MMA kind / low-bit 等设�
 ### 本步目的
 
 追清 CuTe 怎样把逻辑 tensor 分区降到合法 `tcgen05.cp`：`make_s2t_copy()` 组合 copy atom 与 TMEM layout，`get_s2t_smem_desc_tensor()` 产生硬件需要的 SMEM descriptor view，最终 copy 调用才发出指令。读完应能从 wrapper 对象反查 source、destination 与 PTX shape，而不是把 layout 当成 storage 或执行结果。
+
+### 你要回答
+
+`make_s2t_copy()` 和最终的 `cute.copy(...)` 分别处在“描述映射”还是“执行搬运”阶段？哪一步才真正可能发出 `tcgen05.cp`？
+
+```text
+回答：
+
+标准答案：
+```
 
 进入前先知道：PTX 给的是 `taddr + s-desc + shape`；CuTe 负责把"哪个 SMEM
 tensor tile 对应哪个 TMEM tensor tile"编码成 `CopyAtom/TiledCopy`。
@@ -174,6 +226,8 @@ cache tensor stride 决定。
 
 ## 最小流程
 
+![slot_mapping 到 KV cache 写入的逻辑流程](assets/slot_mapping_to_kv_write.svg)
+
 ``` text
 BlockTable.compute_slot_mapping()
         ↓
@@ -208,6 +262,16 @@ tl.store K/V
 #### 本步目的
 
 追完一次真实写入：每个 Triton program 先取 `token_idx` 和 `slot_idx`，负 slot 立即跳过；合法 slot 拆成 `block_idx` 与 `block_offset`，再叠加 head/dim stride 形成 K/V 目标地址，最后执行 `tl.store`。读完应能从一个 flat slot 推到 cache tensor 中的物理位置，而不需要回看 `Request` 或 `BlockPool`。
+
+#### 你要回答
+
+当 `slot_idx = -1` 时 kernel 为什么必须在计算 `block_idx` 前直接返回？当 `slot_idx >= 0` 时，`block_idx` 和 `block_offset` 分别由什么公式得到？
+
+```text
+回答：
+
+标准答案：
+```
 
 搜索：
 
@@ -252,6 +316,16 @@ $$
 
 确认 wrapper 怎样把 PyTorch tensor contract 降成 Triton launch contract：计算 layout 参数和二维 grid，传入所有 pointer、stride、dtype/scale 及 constexpr。读完要知道 grid 的第一维对应 `slot_mapping` 中的 token，第二维覆盖该 token 的 head×dim 数据。
 
+#### 你要回答
+
+为什么 kernel 可以只接收 `slot_mapping`、strides 和 cache tensor，而不需要知道 `BlockPool` 或 `Request`？如果 cache 改成 head-major，改变的是 `slot_mapping` 还是 stride/layout 参数？
+
+```text
+回答：
+
+标准答案：
+```
+
 搜索：
 
 ``` python
@@ -273,6 +347,16 @@ def triton_reshape_and_cache_flash(
 
 把高层调用与前两步接上：backend 将统一 `kv_cache` view 拆成 `key_cache/value_cache`，再把 `key/value/cache/slot_mapping/dtype/scale` 传给 wrapper。读到调用结束就停，确认 cache-write kernel 的输入已经齐全；attention 读取和 scheduler 逻辑不在这个调用点展开。
 
+#### 你要回答
+
+backend 调用 `triton_reshape_and_cache_flash()` 时，`slot_mapping` 与 `key/value` 的第 0 维为什么必须对应同一批 token？如果是 encoder-only attention，为什么这条 KV-cache update 不执行？
+
+```text
+回答：
+
+标准答案：
+```
+
 文件：`vllm/v1/attention/backends/triton_attn.py`
 
 <https://github.com/vllm-project/vllm/blob/main/vllm/v1/attention/backends/triton_attn.py>
@@ -288,9 +372,21 @@ def triton_reshape_and_cache_flash(
 3.  为什么 `slot < 0` 必须最先处理？
 4.  cache 改成 head-major 后，为什么 `slot_mapping` 语义可以不变？
 
+```text
+回答：
+
+标准答案：
+```
+
 # Part 3 --- 面试（约 11 分钟）
 
 ## 口述：为什么 allocator block size 与 kernel layout 可以解耦？
+
+```text
+回答：
+
+标准答案：
+```
 
 allocator 关心 request ownership、复用、eviction、fragmentation；kernel
 关心 tensor layout 和访问效率。中间用
@@ -324,6 +420,12 @@ __global__ void copy_float4(
             dst[i] = src[i];
     }
 }
+```
+
+```text
+回答：
+
+标准答案：
 ```
 
 必须主动补：这个版本假设 `src/dst` 满足 `float4` 对齐；任意偏移 pointer

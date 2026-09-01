@@ -38,6 +38,12 @@
 3. 为什么 `tcgen05.cp` 不是“给一个 SMEM pointer + byte count”的普通 memcpy？
 4. `.cta_group::2` 改变的是一次指令覆盖的 CTA/TMEM 范围，而不是把 `.shape` 简单乘二。
 
+```text
+回答：
+
+标准答案：
+```
+
 ### 4. 精确阅读导航
 
 #### 4.1 先看 Data Movement Shape：3 分钟
@@ -50,6 +56,16 @@
 ##### 本步目的
 
 建立 `.shape = lane × bits-across-columns` 的唯一读法，并认出 `tcgen05.cp` 支持的合法 shape 集合。读完 `.128x256b` 应直接翻译成“128 条 TMEM lanes、每条 lane 横跨 256 bit”，不能把它读成普通 tensor 的 128×256 个元素。
+
+##### 你要回答
+
+看到 `.128x256b` 时，`128` 和 `256b` 分别是什么；为什么不能读成 128×256 个元素？
+
+```text
+回答：
+
+标准答案：
+```
 
 阅读范围：PTX ISA 9.3，§9.7.17.2.3 `Data Movement Shape`。只看 shape 的定义和 `.cp` 支持的 shape 表；后面的 `.ld/.st` fragment layout 今天跳过。
 
@@ -69,6 +85,16 @@
 ##### 本步目的
 
 把四个语法角色接成一次真实数据移动：`s-desc` 解释 source、`.shape` 规定 footprint、指令异步发起、`[taddr]` 指向 destination。读完只需要解释 issue contract；copy completion、跨线程交接和后续 MMA 等待留给同步章节。
+
+##### 你要回答
+
+在 `tcgen05.cp.cta_group::1.128x256b [taddr], s-desc` 中，`s-desc`、`taddr`、`.shape`、`.cta_group` 各负责什么；为什么说由一个线程发起仍然是硬件规定的 copy？
+
+```text
+回答：
+
+标准答案：
+```
 
 阅读范围：PTX ISA 9.3，§9.7.17.9.2 `Tensorcore 5th Generation Instructions: tcgen05.cp`。只看 Syntax + Description 中 `s-desc`、`taddr`、`.shape`、`.cta_group` 的定义；decompression/multicast 细节今天只知道“存在”，不深入。
 
@@ -106,6 +132,16 @@ tcgen05.cp
 
 确认 CUTLASS Python DSL 的 primitive 只是把高层参数组织后落到底层 `tcgen05.cp`，不能绕过 PTX 对 shape、multicast、format 与 `.cta_group` 的限制。读完应能把 wrapper 中的 destination、source descriptor 和 shape 一一映回指令语法，而不是把 wrapper 看成另一套硬件语义。
 
+#### 你要回答
+
+CUTLASS primitive 相比 PTX 改变的是语法封装还是数据移动语义？哪些 PTX 约束仍然保留？
+
+```text
+回答：
+
+标准答案：
+```
+
 NVIDIA CUTLASS Python DSL 的 `tcgen05_cp` primitive 直接把 `shape`、`taddr` 等参数映射到底层 `tcgen05.cp`，并明确把它描述为 asynchronous SMEM→TMEM copy。这里的工程意义不是让你现在学 Python DSL，而是验证：CuTe/CUTLASS 的 copy abstraction 最终仍然受 PTX 的合法 shape/multicast 组合约束。
 
 直接链接：[CUTLASS `tcgen05_cp()` primitive](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/primitives.html#cutlass.experimental.primitives.tcgen05_cp)
@@ -117,6 +153,12 @@ NVIDIA CUTLASS Python DSL 的 `tcgen05_cp` primitive 直接把 `shape`、`taddr`
 1. 如果 source layout 改了，优先变化的是 `s-desc` 还是 `taddr`？
 2. `.128x256b` 的 `256b` 为什么不能直接解释成 N=256？
 3. 如果以后 CuTe 给你一个 TMEM copy atom，你应该先追它的 logical layout，还是先确认最终映射到哪种 PTX data movement shape？为什么？
+
+```text
+回答：
+
+标准答案：
+```
 
 ## 第二部分：vLLM BlockPool 的 cache identity 与 eviction（约 18 分钟）
 
@@ -162,6 +204,16 @@ same physical block_id reused
 
 看清 prefix lookup 索引本身保存什么：一个 `BlockHashWithGroupId` 可以映射一个或多个 physical blocks，`get_one_block()` 返回其中一个候选，`insert()`/`pop()` 维护 identity。此步只研究 hash→block 索引，不讨论 allocator 何时选择或复用 block。
 
+##### 你要回答
+
+同一个 hash 对应多个 physical blocks 时，`get_one_block()` 返回什么；为什么实现不即时 dedupe？
+
+```text
+回答：
+
+标准答案：
+```
+
 文件：`vllm/v1/core/block_pool.py`
 
 阅读对象：`class BlockHashToBlockMap` 的类注释和 `get_one_block()` / `insert()` / `pop()`。
@@ -182,6 +234,16 @@ same physical block_id reused
 ##### 本步目的
 
 确认三个容器的所有者和分工：`free_block_queue` 决定可分配候选及 eviction 顺序，`cached_block_hash_to_block` 支持 prefix 正向查找，`cached_block_hashes_by_block` 支持按 physical block 反查并清除它关联的全部 hash keys。读完只建立容器关系，不进入状态变化。
+
+##### 你要回答
+
+`free_block_queue`、`cached_block_hash_to_block`、`cached_block_hashes_by_block` 各回答什么查询或状态问题？
+
+```text
+回答：
+
+标准答案：
+```
 
 同一文件，读 `free_block_queue`、`cached_block_hash_to_block`、`cached_block_hashes_by_block` 三个字段初始化。
 
@@ -205,6 +267,16 @@ cached_block_hashes_by_block → 从 physical block 反查并清理它拥有的 
 ##### 本步目的
 
 追清不可颠倒的状态顺序：`popleft_n()` 先取得候选，`_maybe_evict_cached_block()` 删除该 physical block 的全部旧 hash identity 并重置 hash，随后才 `ref_cnt += 1` 交给新 owner。读完要能指出：eviction 改变的是 cache metadata 语义，physical block 本身仍被原地复用。
+
+##### 你要回答
+
+为什么顺序必须是 `popleft_n()` → 清旧 hash → `ref_cnt++`？如果先 `ref_cnt++`，会破坏哪个 invariant？
+
+```text
+回答：
+
+标准答案：
+```
 
 同一文件，先读 `get_new_blocks()`，紧接着读 `_maybe_evict_cached_block()`。
 
@@ -239,6 +311,16 @@ ref_cnt += 1
 
 确认 cached-free block 怎样恢复 active ownership：若 `ref_cnt == 0`，先从 free queue 中间移除，防止 allocator 同时取走；然后统一增加 `ref_cnt`。这一步证明 `free` 与 `evicted` 是两个独立状态，命中后 physical block 和原 hash identity 都继续有效。
 
+##### 你要回答
+
+`touch()` 命中 `ref_cnt=0` 的 cached block 时，为什么移出 free queue 但不 `reset_hash`？
+
+```text
+回答：
+
+标准答案：
+```
+
 继续读 `touch()`。
 
 直接链接：[固定 commit：`touch()`](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/core/block_pool.py#L702-L717)
@@ -256,6 +338,12 @@ ref_cnt += 1
 3. 如果复用物理 block 时忘记删除旧 hash，会产生哪类错误：内存泄漏、错误 prefix hit，还是 block_id 改变？
 4. `touch()` 为什么需要把 `ref_cnt=0` 的 block 从 free queue 移除？
 
+```text
+回答：
+
+标准答案：
+```
+
 ## 第三部分：把两个主题压成一个工程 invariant（约 5 分钟）
 
 这两段今天放在一起，不是因为它们业务上相关，而是因为它们共享同一种工程思维：**物理存储和解释它的 metadata 必须分开看。**
@@ -269,6 +357,12 @@ Blackwell 中，SMEM/TMEM 是物理存储，descriptor/shape 决定硬件怎样�
 为什么 `ref_cnt == 0` 不能直接推出 `block_hash is None`？
 
 要求 90 秒内说清：free、cached、evicted 三个概念；为什么保留 hash 有 prefix reuse 价值；为什么真正重新分配前必须 eviction。
+
+```text
+回答：
+
+标准答案：
+```
 
 ### 手写训练：只写 ownership/address grammar
 
@@ -294,6 +388,12 @@ __global__ void copy_A_tile(const half* A, half* smem, int M, int K, int k_iter)
 ```
 
 Review 只看：坐标层级有没有混；`item → linear → local → global → offset` 是否稳定；有没有把多层语义重新塞进一个巨大表达式。
+
+```text
+回答：
+
+标准答案：
+```
 
 ## 验收标准
 
