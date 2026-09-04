@@ -74,7 +74,7 @@ tcgen05.cp                 : SMEM → TMEM
 在 `tcgen05.cp.cta_group::1.128x256b [taddr], s-desc` 中，哪个 operand 描述 SMEM 源矩阵，哪个 operand 指向 TMEM 目的地？`.shape` 与 `s-desc` 为什么不能互换职责？
 
 ```text
-回答：
+回答：s-desc就是描述SMEM源矩阵的，taddr就是目的地，shape是描述TMEM layout的，s-desc是描述共享内存的内存布局的，而且好像也不能这么说这是描述共享内存布局的，但是其实和做wgmma需要的描述好像是统一个，我不知道umma是否也是这样的。
 
 标准答案：
 ```
@@ -101,7 +101,7 @@ tcgen05.cp                 : SMEM → TMEM
 什么条件下 `tcgen05.cp` 才会做 4/6-bit 到 8-bit 的 decompression？普通 F16/BF16 的 SMEM→TMEM copy 是否自动走这条路径？
 
 ```text
-回答：
+回答：src_fmt和dst_fmt都有效时才会做decompression，普通的不需要吧，没看到这里。
 
 标准答案：
 ```
@@ -135,7 +135,7 @@ instruction descriptor、CTA-pair shape 细节、完整 mbarrier 协议。
 在 `A/B: GMEM → SMEM → MMA` 与 `C/D: TMEM → RMEM → GMEM` 两条路径中，哪一条默认不需要 `tcgen05.cp`？什么条件会让 operand 额外经过 SMEM→TMEM？
 
 ```text
-回答：
+回答：第二条是tcgen05.ld，昨天看过；是不是要把A矩阵加载到TMEM计算，那么就是因为SMEM不够用了就得加载部分到TMEM；
 
 标准答案：
 ```
@@ -169,7 +169,7 @@ SMEM→TMEM；是否使用取决于 operand source / MMA kind / low-bit 等设�
 `make_s2t_copy()` 和最终的 `cute.copy(...)` 分别处在“描述映射”还是“执行搬运”阶段？哪一步才真正可能发出 `tcgen05.cp`？
 
 ```text
-回答：
+回答：这里是不是弄错了，直接到了scaler mma去了
 
 标准答案：
 ```
@@ -250,7 +250,12 @@ tl.store K/V
 
 文件：`vllm/v1/attention/ops/triton_reshape_and_cache_flash.py`
 
-<https://github.com/vllm-project/vllm/blob/main/vllm/v1/attention/ops/triton_reshape_and_cache_flash.py>
+源码链接（固定到 Day 1/2 使用的 vLLM commit
+`80771bbbddf9e5153eea3aca8055049ee5aaaed1`；链接中的 `#Lx-Ly` 就是要看的代码行）：
+
+- 上游输入：[`BlockTable.compute_slot_mapping` 生成 GPU `slot_mapping`（Day 2 固定 commit，L201-L229）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/worker/block_table.py#L201-L229)
+- [`reshape_and_cache_kernel_flash`：读取 `slot_mapping`、拆分 block/offset、计算目标地址并 `tl.store`（L29-L131）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/attention/ops/triton_reshape_and_cache_flash.py#L29-L131)
+- [`triton_reshape_and_cache_flash`：读取 cache shape/stride、计算 grid、发起 kernel（L337-L429）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/attention/ops/triton_reshape_and_cache_flash.py#L337-L429)
 
 ### Step 1：kernel 地址主路径（8 分钟）
 
@@ -294,6 +299,9 @@ tl.store
 
 跳过：head-major、FP8 scale、TILE_SIZE 调优、per-token-head
 quantization、DiffKV、ROCm/XPU。
+
+如果不想在文件里搜索，直接打开上面的第二条链接；本题只读其中
+`token_idx` 到两次 `tl.store` 的范围。
 
 普通 4D layout 的目标地址本质：
 
@@ -359,10 +367,17 @@ backend 调用 `triton_reshape_and_cache_flash()` 时，`slot_mapping` 与 `key/
 
 文件：`vllm/v1/attention/backends/triton_attn.py`
 
-<https://github.com/vllm-project/vllm/blob/main/vllm/v1/attention/backends/triton_attn.py>
+源码链接（同一固定 commit）：
+
+- [`TritonAttentionMetadata`：`slot_mapping` 字段（L51-L66）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/attention/backends/triton_attn.py#L51-L66)
+- [`TritonAttentionMetadataBuilder.build`：从 `common_attn_metadata` 接收并保存 `slot_mapping`（L176-L214）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/attention/backends/triton_attn.py#L176-L214)
+- [`TritonAttentionImpl.do_kv_cache_update`：encoder 提前返回、拆分 cache、调用 reshape wrapper（L692-L735）](https://github.com/vllm-project/vllm/blob/80771bbbddf9e5153eea3aca8055049ee5aaaed1/vllm/v1/attention/backends/triton_attn.py#L692-L735)
 
 搜索 `triton_reshape_and_cache_flash(`，只看调用点周围，确认传入
 `key/value/key_cache/value_cache/slot_mapping/dtype/scale`，然后停止。
+
+本题直接看第三条链接的 `do_kv_cache_update()`；如果要核对
+encoder-only 为什么不写 cache，看其中 `L700-L703` 的提前 `return`。
 
 ## 自检
 

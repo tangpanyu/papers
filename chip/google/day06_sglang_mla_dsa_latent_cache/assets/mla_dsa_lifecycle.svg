@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120">
+  <defs>
+    <style>
+      .title{font:700 34px 'DejaVu Sans',Arial,sans-serif;fill:#172033}
+      .section{font:700 24px 'DejaVu Sans',Arial,sans-serif;fill:#25324a}
+      .label{font:600 20px 'DejaVu Sans',Arial,sans-serif;fill:#172033}
+      .body{font:400 18px 'DejaVu Sans',Arial,sans-serif;fill:#34415b}
+      .mono{font:500 17px 'DejaVu Sans Mono',monospace;fill:#26344d}
+      .small{font:400 15px 'DejaVu Sans',Arial,sans-serif;fill:#526079}
+      .card{stroke-width:2}
+      .meta{fill:none;stroke:#3478d4;stroke-width:3;stroke-dasharray:11 8;marker-end:url(#arrowBlue)}
+      .data{fill:none;stroke:#e26055;stroke-width:4;marker-end:url(#arrowRed)}
+      .life{fill:none;stroke:#2b9a70;stroke-width:3;marker-end:url(#arrowGreen)}
+    </style>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#3478d4"/></marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#e26055"/></marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#2b9a70"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#23304a" flood-opacity="0.12"/></filter>
+  </defs>
+
+  <rect width="1800" height="1120" fill="#f7f9fc"/>
+  <text x="55" y="58" class="title">MLA / DSA latent cache: complete state bus from startup to prefix reuse</text>
+  <text x="55" y="90" class="small">Self-drawn summary · one flat location indexes both the latent main pool and DSA sidecar · kernel internals omitted</text>
+
+  <rect x="45" y="120" width="1710" height="205" rx="22" fill="#effaf4" stroke="#67b98f" class="card" filter="url(#shadow)"/>
+  <text x="75" y="160" class="section">1 · Startup: capacity comes from bytes per token across local layers</text>
+  <rect x="80" y="185" width="355" height="105" rx="14" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="105" y="215" class="label">DefaultPoolConfigurator</text>
+  <text x="105" y="244" class="mono">C = floor(budget/cell/P) × P</text>
+  <text x="105" y="270" class="small">DSA indexer bytes belong in the same cell cost</text>
+  <rect x="515" y="185" width="500" height="105" rx="14" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="540" y="215" class="label">MLATokenToKVPool: one tensor per layer</text>
+  <text x="540" y="244" class="mono">kv_buffer[L] : [C + P, 1, r + s]</text>
+  <text x="540" y="270" class="small">persistent cKV (r dims) + RoPE key component (s dims)</text>
+  <rect x="1095" y="185" width="615" height="105" rx="14" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="1120" y="215" class="label">DSATokenToKVPool: main pool + indexer sidecar</text>
+  <text x="1120" y="244" class="mono">IndexKeyCache[L] : [Npages, P × (128 + 4)] uint8</text>
+  <text x="1120" y="270" class="small">row = 128-byte FP8 key + 4-byte FP32 scale; skip-topk layers may have 0 pages</text>
+  <path d="M435 238 L515 238" class="life"/>
+  <path d="M1015 238 L1095 238" class="life"/>
+
+  <rect x="45" y="355" width="1710" height="220" rx="22" fill="#eaf4ff" stroke="#72a9df" class="card" filter="url(#shadow)"/>
+  <text x="75" y="395" class="section">2 · Admission / prefix match: logical sequence -&gt; flat physical locations</text>
+  <rect x="80" y="425" width="320" height="110" rx="14" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="105" y="455" class="label">RadixCache.match_prefix</text>
+  <text x="105" y="484" class="mono">token key → prefix loc[]</text>
+  <text x="105" y="510" class="small">a hit returns locations; latent bytes are not copied</text>
+  <rect x="480" y="425" width="320" height="110" rx="14" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="505" y="455" class="label">Paged allocator</text>
+  <text x="505" y="484" class="mono">free_pages → out_cache_loc</text>
+  <text x="505" y="510" class="small">allocate only for misses / new tokens</text>
+  <rect x="880" y="425" width="400" height="110" rx="14" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="905" y="455" class="label">ReqToTokenPool row R</text>
+  <text x="905" y="484" class="mono">[prefix locs | new locs]</text>
+  <text x="905" y="510" class="small">the complete per-token address table</text>
+  <rect x="1360" y="425" width="350" height="110" rx="14" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="1385" y="455" class="label">ForwardBatch</text>
+  <text x="1385" y="484" class="mono">R / seq_lens / out_cache_loc</text>
+  <text x="1385" y="510" class="small">entry metadata for one forward</text>
+  <path d="M400 480 L480 480" class="meta"/>
+  <path d="M800 480 L880 480" class="meta"/>
+  <path d="M1280 480 L1360 480" class="meta"/>
+
+  <rect x="45" y="605" width="1710" height="285" rx="22" fill="#f2edff" stroke="#9e88df" class="card" filter="url(#shadow)"/>
+  <text x="75" y="645" class="section">3 · Prefill / decode: one out_cache_loc writes both persistent states</text>
+  <rect x="80" y="680" width="320" height="145" rx="14" fill="#ffffff" stroke="#ad9ae4"/>
+  <text x="105" y="710" class="label">current-token projections</text>
+  <text x="105" y="741" class="mono">k_nope : [N,1,r]</text>
+  <text x="105" y="768" class="mono">k_rope : [N,1,s]</text>
+  <text x="105" y="796" class="mono">index_k : [N,128]</text>
+  <rect x="490" y="680" width="330" height="145" rx="14" fill="#fff5f2" stroke="#e8988f"/>
+  <text x="515" y="710" class="label">persistent writes</text>
+  <text x="515" y="741" class="body">latent main pool writes [loc,0,:]</text>
+  <text x="515" y="768" class="body">index K+scale: same loc</text>
+  <text x="515" y="796" class="small">prefill writes N rows; decode appends 1/request</text>
+  <rect x="905" y="680" width="350" height="145" rx="14" fill="#ffffff" stroke="#ad9ae4"/>
+  <text x="930" y="710" class="label">backend metadata builder</text>
+  <text x="930" y="741" class="mono">page_table_1 / real_page_table</text>
+  <text x="930" y="768" class="mono">q/kv indptr + cache_seqlens</text>
+  <text x="930" y="796" class="small">request rows -&gt; kernel-ready shapes</text>
+  <rect x="1340" y="680" width="370" height="145" rx="14" fill="#ffffff" stroke="#ad9ae4"/>
+  <text x="1365" y="710" class="label">kernel-visible view</text>
+  <text x="1365" y="741" class="body">index pages → top-k</text>
+  <text x="1365" y="768" class="body">attention → selected latent rows</text>
+  <text x="1365" y="796" class="small">top-k is per-forward, not prefix state</text>
+  <path d="M400 752 L490 752" class="data"/>
+  <path d="M820 752 L905 752" class="meta"/>
+  <path d="M1255 752 L1340 752" class="meta"/>
+  <path d="M1450 825 C1450 860,680 860,680 830" class="data"/>
+
+  <rect x="45" y="920" width="1710" height="125" rx="22" fill="#effaf4" stroke="#67b98f" class="card" filter="url(#shadow)"/>
+  <text x="75" y="958" class="section">4 · Finish / cached / evict / reuse</text>
+  <text x="85" y="994" class="body">finish: insert page-aligned prefix + loc[] into Radix; release request row; unlock active path into evictable state</text>
+  <text x="85" y="1023" class="body">evict: delete Radix leaf and return page ID; latent/indexer bytes stay stale until the next owner overwrites that loc</text>
+  <path d="M1660 920 C1725 865,1725 290,1670 290" class="life"/>
+
+  <line x1="70" y1="1082" x2="138" y2="1082" class="data"/>
+  <text x="153" y="1089" class="small">tensor data write / read</text>
+  <line x1="420" y1="1082" x2="488" y2="1082" class="meta"/>
+  <text x="503" y="1089" class="small">metadata / index / address relation</text>
+  <line x1="835" y1="1082" x2="903" y2="1082" class="life"/>
+  <text x="918" y="1089" class="small">ownership / lifecycle</text>
+</svg>

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="780" viewBox="0 0 1800 780">
+  <defs>
+    <style>
+      .title{font:700 34px 'DejaVu Sans',Arial,sans-serif;fill:#172033}
+      .section{font:700 24px 'DejaVu Sans',Arial,sans-serif;fill:#25324a}
+      .label{font:600 21px 'DejaVu Sans',Arial,sans-serif;fill:#172033}
+      .body{font:400 19px 'DejaVu Sans',Arial,sans-serif;fill:#34415b}
+      .mono{font:500 18px 'DejaVu Sans Mono',monospace;fill:#26344d}
+      .small{font:400 16px 'DejaVu Sans',Arial,sans-serif;fill:#526079}
+      .card{stroke-width:2}
+      .meta{fill:none;stroke:#3478d4;stroke-width:3;stroke-dasharray:11 8;marker-end:url(#arrowBlue)}
+      .data{fill:none;stroke:#e26055;stroke-width:4;marker-end:url(#arrowRed)}
+      .life{fill:none;stroke:#2b9a70;stroke-width:3;marker-end:url(#arrowGreen)}
+    </style>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#3478d4"/></marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#e26055"/></marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#2b9a70"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#23304a" flood-opacity="0.12"/></filter>
+  </defs>
+
+  <rect width="1800" height="780" fill="#f7f9fc"/>
+  <text x="60" y="60" class="title">SGLang Full Attention: the exact delta from the Day05 vLLM model</text>
+  <text x="60" y="93" class="small">Self-drawn summary · page_size = 64 · dashed blue = metadata/address · solid red = tensor write · green = ownership/lifecycle</text>
+
+  <rect x="50" y="125" width="470" height="235" rx="20" fill="#eef1f6" stroke="#aab4c4" class="card" filter="url(#shadow)"/>
+  <text x="80" y="164" class="section">Day05 vLLM bridge</text>
+  <rect x="80" y="188" width="410" height="66" rx="13" fill="#ffffff" stroke="#b8c1d0"/>
+  <text x="100" y="218" class="label">block table</text>
+  <text x="100" y="244" class="mono">logical block 0,1 → physical block 11,41</text>
+  <rect x="80" y="272" width="410" height="61" rx="13" fill="#ffffff" stroke="#b8c1d0"/>
+  <text x="100" y="300" class="body">kernel slot = block_id × P + offset</text>
+  <text x="100" y="325" class="small">mapping: logical block -&gt; physical block</text>
+
+  <rect x="565" y="125" width="600" height="235" rx="20" fill="#eaf4ff" stroke="#72a9df" class="card" filter="url(#shadow)"/>
+  <text x="595" y="164" class="section">SGLang core: a direct token-location table</text>
+  <rect x="595" y="188" width="540" height="72" rx="13" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="618" y="216" class="label">ReqToTokenPool.req_to_token</text>
+  <text x="618" y="246" class="mono">shape = [num_request_rows + 1, max_context_len]</text>
+  <rect x="595" y="276" width="540" height="58" rx="13" fill="#ffffff" stroke="#86b6e6"/>
+  <text x="618" y="303" class="mono">row 23: [704 … 767, 2624, 2625, …]</text>
+  <text x="618" y="326" class="small">each cell is a flat physical KV slot; row 0 is padding/dummy</text>
+
+  <rect x="1210" y="125" width="540" height="235" rx="20" fill="#f2edff" stroke="#9e88df" class="card" filter="url(#shadow)"/>
+  <text x="1240" y="164" class="section">backend → kernel view</text>
+  <rect x="1240" y="188" width="480" height="72" rx="13" fill="#ffffff" stroke="#ad9ae4"/>
+  <text x="1262" y="216" class="label">ForwardBatch</text>
+  <text x="1262" y="246" class="mono">req_pool_indices / seq_lens / out_cache_loc</text>
+  <rect x="1240" y="276" width="480" height="58" rx="13" fill="#ffffff" stroke="#ad9ae4"/>
+  <text x="1262" y="303" class="mono">[704, 2624] ÷ 64 → block table [11, 41]</text>
+  <text x="1262" y="326" class="small">only paged backends perform this compression</text>
+
+  <path d="M520 243 C540 243,545 243,565 243" class="meta"/>
+  <path d="M1165 243 C1185 243,1190 243,1210 243" class="meta"/>
+
+  <rect x="50" y="405" width="1700" height="300" rx="24" fill="#effaf4" stroke="#67b98f" class="card" filter="url(#shadow)"/>
+  <text x="80" y="448" class="section">One real SGLang lifecycle: one mapping, two owners</text>
+
+  <rect x="85" y="480" width="255" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="110" y="512" class="label">RadixCache</text>
+  <text x="110" y="543" class="mono">token prefix → loc[]</text>
+  <text x="110" y="570" class="body">lock_ref protects path</text>
+
+  <rect x="390" y="480" width="260" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="415" y="512" class="label">Paged allocator</text>
+  <text x="415" y="543" class="mono">free_pages → loc[]</text>
+  <text x="415" y="570" class="body">owns free page IDs</text>
+
+  <rect x="705" y="480" width="350" height="120" rx="15" fill="#fff5f2" stroke="#e8988f"/>
+  <text x="730" y="512" class="label">physical K/V buffers</text>
+  <text x="730" y="543" class="mono">K/V[L][slot, H, D]</text>
+  <text x="730" y="570" class="body">requests own slots</text>
+
+  <rect x="1110" y="480" width="265" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="1135" y="512" class="label">finish</text>
+  <text x="1135" y="543" class="body">Radix insert; row free</text>
+  <text x="1135" y="570" class="body">cached ≠ allocator-free</text>
+
+  <rect x="1430" y="480" width="270" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="1455" y="512" class="label">evict / reuse</text>
+  <text x="1455" y="543" class="body">delete leaf; page free</text>
+  <text x="1455" y="570" class="body">stale bytes persist</text>
+
+  <path d="M340 540 L390 540" class="meta"/>
+  <path d="M650 540 L705 540" class="data"/>
+  <path d="M1055 540 L1110 540" class="life"/>
+  <path d="M1375 540 L1430 540" class="life"/>
+  <path d="M1565 600 C1565 675,520 675,520 610" class="life"/>
+  <text x="625" y="660" class="body">Reuse returns page/slot IDs; the CUDA allocation outlives every request.</text>
+
+  <line x1="82" y1="735" x2="150" y2="735" class="data"/>
+  <text x="165" y="742" class="small">tensor data write</text>
+  <line x1="405" y1="735" x2="473" y2="735" class="meta"/>
+  <text x="488" y="742" class="small">index / address relation</text>
+  <line x1="735" y1="735" x2="803" y2="735" class="life"/>
+  <text x="818" y="742" class="small">ownership / lifecycle</text>
+</svg>

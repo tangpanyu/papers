@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620">
+<rect width="100%" height="100%" fill="white"/>
+<text x="600" y="36" text-anchor="middle" font-family="sans-serif" font-size="25">Ironwood scale-up hierarchy: chip → 64-chip cube → OCS-connected cubes</text>
+<text x="600" y="60" text-anchor="middle" font-family="sans-serif" font-size="13">schematic / not to scale / 根据 Google Cloud 官方资料重绘</text>
+<g font-family="sans-serif">
+<rect x="40" y="120" width="315" height="315" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="197" y="150" text-anchor="middle" font-size="18">Cube = 4 × 4 × 4 = 64 chips</text>
+<g fill="#ddd" stroke="#333">
+<circle cx="110" cy="215" r="18"/><circle cx="190" cy="215" r="18"/><circle cx="270" cy="215" r="18"/>
+<circle cx="110" cy="295" r="18"/><circle cx="190" cy="295" r="18"/><circle cx="270" cy="295" r="18"/>
+<circle cx="150" cy="255" r="18"/><circle cx="230" cy="255" r="18"/>
+</g>
+<g stroke="#333" stroke-width="3"><line x1="128" y1="215" x2="172" y2="215"/><line x1="208" y1="215" x2="252" y2="215"/><line x1="128" y1="295" x2="172" y2="295"/><line x1="208" y1="295" x2="252" y2="295"/><line x1="120" y1="230" x2="140" y2="242"/><line x1="200" y1="230" x2="220" y2="242"/></g>
+<text x="197" y="375" text-anchor="middle" font-size="14">direct 3D torus ICI</text>
+<text x="197" y="400" text-anchor="middle" font-size="13">each chip: 6 neighbors / 3 axes</text>
+
+<rect x="455" y="170" width="250" height="210" fill="#eee" stroke="#333" stroke-width="2"/>
+<text x="580" y="205" text-anchor="middle" font-size="20">OCS fabric</text>
+<text x="580" y="240" text-anchor="middle" font-size="14">reconfigurable optical circuits</text>
+<text x="580" y="270" text-anchor="middle" font-size="14">connect cubes beyond copper domain</text>
+<text x="580" y="315" text-anchor="middle" font-size="13">switch internals / exact path selection:</text>
+<text x="580" y="340" text-anchor="middle" font-size="13">not disclosed here</text>
+
+<rect x="805" y="105" width="345" height="340" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="977" y="140" text-anchor="middle" font-size="18">Pod / Superpod</text>
+<rect x="845" y="185" width="110" height="70" fill="#ddd" stroke="#333"/><text x="900" y="226" text-anchor="middle">cube</text>
+<rect x="1000" y="185" width="110" height="70" fill="#ddd" stroke="#333"/><text x="1055" y="226" text-anchor="middle">cube</text>
+<rect x="845" y="300" width="110" height="70" fill="#ddd" stroke="#333"/><text x="900" y="341" text-anchor="middle">cube</text>
+<rect x="1000" y="300" width="110" height="70" fill="#ddd" stroke="#333"/><text x="1055" y="341" text-anchor="middle">…</text>
+<text x="977" y="410" text-anchor="middle" font-size="13">up to 144 cubes = 9,216 chips</text>
+
+<line x1="355" y1="275" x2="455" y2="275" stroke="#333" stroke-width="5"/>
+<line x1="705" y1="275" x2="805" y2="275" stroke="#333" stroke-width="5"/>
+<text x="405" y="258" text-anchor="middle" font-size="13">optical ICI</text>
+<text x="755" y="258" text-anchor="middle" font-size="13">optical ICI</text>
+<text x="600" y="520" text-anchor="middle" font-size="15">Within cube: copper ICI. Between cubes: optical links + OCS. Beyond superpod: DCN.</text>
+</g></svg>
