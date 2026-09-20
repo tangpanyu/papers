@@ -1,6 +1,7 @@
 # Google TPU Day 3：HBM、VMEM 与 Double Buffering
 
 - 日期：2026-08-28
+- 资料复核：2026-09-08（动态产品、规格与 API 状态以该日页面为准）
 - 预计学习时间：约 30 分钟
 - 承接：Day 2 已建立 `TensorCore → MXU/VPU/Scalar Unit`；今天只回答数据如何持续喂给执行单元。
 
@@ -12,16 +13,22 @@
 
 JAX Pallas 官方文档把 TensorCore 分成 memory spaces、registers 和 compute units。HBM 是设备 DRAM，VMEM 是 vector SRAM，SMEM 是 scalar SRAM；VPU/MXU 操作 VREG，Scalar Unit 操作 SREG。
 
+先对照 JAX 官方的 memory-space 示意图（图中 `x`、`y` 是位于 HBM 的输入）：
+
+![JAX 官方 TPU memory-space 示意图](assets/03_tpu_memory_space_jax_official.png)
+
+来源：[JAX Pallas — TPU Pipelining](https://docs.jax.dev/en/latest/pallas/tpu/pipelining.html)。这是执行模型示意，不是某一代 TPU 的物理 floorplan；本地副本与抓取信息见 `assets/REMOTE_IMAGES.md`。
+
 ```text
 HBM --DMA/copy--> VMEM --> VREG --> VPU/MXU
 SMEM -----------> SREG ----------> Scalar Unit
 ```
 
-Pallas Quickstart 明确说明：HBM Ref 不能直接用于普通计算，数据先复制到 VMEM，结果再写回 HBM。因此 VMEM 不应理解成普通透明 L1 cache，而是程序可见的 staging/working-set SRAM。
+Pallas Quickstart 明确说明：位于 HBM memory space 的 Ref（文档通常简称 **HBM Ref**）不能直接用于普通计算，数据先复制到 VMEM，结果再写回 HBM。因此 VMEM 不应理解成普通透明 L1 cache，而是程序可见的 staging/working-set SRAM。
 
 ## 2. Ironwood 的容量尺度
 
-JAX Hardware Reference 的数字是 **per TensorCore**。TPU 7X/Ironwood 每 TensorCore 公布约 64 MiB VMEM、1 MiB SMEM、103 GB HBM、3.7 TB/s HBM bandwidth。Ironwood 一颗 chip 有两个 TensorCore；不要混淆 per-core 与 per-chip 数字。
+JAX [TPU Hardware Reference](https://docs.jax.dev/en/latest/pallas/tpu/hardware.html) 的数字是 **per TensorCore**。TPU 7X/Ironwood 每 TensorCore 公布约 64 MiB VMEM、1 MiB SMEM、103 GB HBM、3.7 TB/s HBM bandwidth。Google Cloud [TPU7x 规格表](https://docs.cloud.google.com/tpu/docs/tpu7x) 则按 **per chip** 写 192 GiB、7,380 GB/s；两张表的作用域、单位和取整口径不同，不能把数字直接逐项相加或当成矛盾。Ironwood 一颗 chip 有两个 TensorCore；不要混淆 per-core 与 per-chip 数字。
 
 $$
 \text{HBM capacity} \gg \text{VMEM capacity}
@@ -30,6 +37,8 @@ $$
 权重、KV cache、activation 不可能全部常驻 VMEM，所以 kernel 必须持续把 working tile 从 HBM 搬入 VMEM。
 
 ## 3. 同步 copy 为什么制造 bubble
+
+下面只表达数据方向的语义伪代码；可运行的 Pallas kernel 还需要通过 `pl.kernel` 的 `out_type`/`scratch_types` 提供相应的 HBM/VMEM Refs。
 
 ```python
 pltpu.sync_copy(x_hbm, x_vmem)
@@ -45,6 +54,12 @@ Compute:             [ compute N ]          [ compute N+1 ]
 ```
 
 DMA 与 compute 没重叠，硬件轮流闲置。
+
+JAX 的软件流水线文档用下面的 bandwidth-bound 时间线表达同一个现象：copy 阶段占满搬运资源时，compute 之间仍可能出现 `Idle`，增加 buffer 不能凭空增加带宽。
+
+![JAX 官方 bandwidth-bound pipeline 时间线](assets/02_pipelining_bandwidth_bound_official.svg)
+
+来源：[JAX — Software Pipelining](https://docs.jax.dev/en/latest/pallas/pipelining.html)；图源文件钉在 [JAX commit `02fed78`](https://github.com/jax-ml/jax/blob/02fed78da8636337dcc051079c03947cd9949908/docs/_static/pallas/pipelining_bandwidth_bound.svg)。图是通用流水线示意，不宣称 TPU 特定 cycle 数。
 
 ## 4. Double buffering
 
@@ -105,7 +120,7 @@ $$
 
 steady state 仍约等于 `T_copy`。
 
-所以 pipeline **隐藏 latency，不创造 bandwidth**。decode GEMV/小 M GEMM 即使 pipeline 完美，仍可能被每 token 必须搬运的 weight/KV bytes 和 HBM bandwidth 卡住。
+所以 pipeline **隐藏 latency，不创造 bandwidth**。decode GEMV/小 M GEMM 即使 pipeline 完美，仍可能被每 token 需要从 HBM 读取的 weight/KV bytes 和 HBM bandwidth 卡住；这里不意味着每次都要重新分配或跨 host 搬运。
 
 ## 容易混淆的点
 
@@ -132,3 +147,4 @@ steady state 仍约等于 `T_copy`。
 2. [JAX Pallas — Quickstart: TPU](https://docs.jax.dev/en/latest/pallas/tpu/quickstart.html)
 3. [JAX Pallas — TPU Hardware Reference](https://docs.jax.dev/en/latest/pallas/tpu/hardware.html)
 4. [Google Cloud — Inside the Ironwood TPU codesigned AI stack](https://cloud.google.com/blog/products/compute/inside-the-ironwood-tpu-codesigned-ai-stack/)
+5. [JAX — Software Pipelining](https://docs.jax.dev/en/latest/pallas/pipelining.html)

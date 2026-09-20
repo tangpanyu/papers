@@ -31,11 +31,12 @@
   <rect x="515" y="185" width="500" height="105" rx="14" fill="#ffffff" stroke="#79bf9d"/>
   <text x="540" y="215" class="label">MLATokenToKVPool: one tensor per layer</text>
   <text x="540" y="244" class="mono">kv_buffer[L] : [C + P, 1, r + s]</text>
-  <text x="540" y="270" class="small">persistent cKV (r dims) + RoPE key component (s dims)</text>
-  <rect x="1095" y="185" width="615" height="105" rx="14" fill="#ffffff" stroke="#79bf9d"/>
+  <text x="540" y="270" class="small">persistent cKV + RoPE (unpacked BF16 teaching path)</text>
+  <rect x="1095" y="185" width="615" height="130" rx="14" fill="#ffffff" stroke="#79bf9d"/>
   <text x="1120" y="215" class="label">DSATokenToKVPool: main pool + indexer sidecar</text>
-  <text x="1120" y="244" class="mono">IndexKeyCache[L] : [Npages, P × (128 + 4)] uint8</text>
-  <text x="1120" y="270" class="small">row = 128-byte FP8 key + 4-byte FP32 scale; skip-topk layers may have 0 pages</text>
+  <text x="1120" y="244" class="mono">IndexKeyCache[L] : [Npages, P×128 + P×4] uint8</text>
+  <text x="1120" y="270" class="small">physical K[P,128] | scale[P,4] (SoA); same offset pairs both</text>
+  <text x="1120" y="288" class="small">skip-topk layers may have 0-row placeholder; no interleaved 132B record</text>
   <path d="M435 238 L515 238" class="life"/>
   <path d="M1015 238 L1095 238" class="life"/>
 
@@ -90,8 +91,8 @@
 
   <rect x="45" y="920" width="1710" height="125" rx="22" fill="#effaf4" stroke="#67b98f" class="card" filter="url(#shadow)"/>
   <text x="75" y="958" class="section">4 · Finish / cached / evict / reuse</text>
-  <text x="85" y="994" class="body">finish: insert page-aligned prefix + loc[] into Radix; release request row; unlock active path into evictable state</text>
-  <text x="85" y="1023" class="body">evict: delete Radix leaf and return page ID; latent/indexer bytes stay stale until the next owner overwrites that loc</text>
+  <text x="85" y="994" class="body">finish (is_insert): optional Radix insert; release row; decrement lock_ref</text>
+  <text x="85" y="1023" class="body">evictable iff lock_ref == 0; evict deletes leaf + returns page ID; bytes stay stale</text>
   <path d="M1660 920 C1725 865,1725 290,1670 290" class="life"/>
 
   <line x1="70" y1="1082" x2="138" y2="1082" class="data"/>

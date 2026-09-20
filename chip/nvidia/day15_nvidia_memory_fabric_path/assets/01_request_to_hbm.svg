@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+<defs><marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker><style>
+text{font-family:Arial,"Noto Sans SC",sans-serif;fill:#172033}.title{font-size:30px;font-weight:700}.sub{font-size:16px;fill:#526579}.h{font-size:21px;font-weight:700}.b{font-size:17px}.s{font-size:15px;fill:#526579}.box{stroke-width:2.5;rx:15}.arrow{stroke:#334155;stroke-width:3.5;fill:none;marker-end:url(#arrow)}.hot{stroke:#d97706;stroke-width:3;stroke-dasharray:9 7;fill:none;marker-end:url(#arrow)}
+</style></defs>
+<rect width="1400" height="820" fill="#f7fafc"/>
+<text x="700" y="48" text-anchor="middle" class="title">从 warp 请求到 HBM：每一段都可能先成为瓶颈</text>
+<text x="700" y="78" text-anchor="middle" class="sub">教学重绘 / schematic / not to scale；依据 CUDA 与 Nsight Compute 的公开可观测层</text>
+
+<rect x="55" y="135" width="235" height="125" class="box" fill="#dceeff" stroke="#4f8ac9"/><text x="172" y="178" text-anchor="middle" class="h">SM / LSU</text><text x="172" y="210" text-anchor="middle" class="b">warp instruction</text><text x="172" y="237" text-anchor="middle" class="s">lanes + addresses</text>
+<rect x="345" y="135" width="235" height="125" class="box" fill="#e8e1ff" stroke="#7964c5"/><text x="462" y="178" text-anchor="middle" class="h">L1TEX</text><text x="462" y="210" text-anchor="middle" class="b">request / sector</text><text x="462" y="237" text-anchor="middle" class="s">hit or miss</text>
+<rect x="635" y="135" width="235" height="125" class="box" fill="#e5f2f1" stroke="#3d8f8a"/><text x="752" y="178" text-anchor="middle" class="h">片上 XBAR / fabric</text><text x="752" y="210" text-anchor="middle" class="b">route / queue</text><text x="752" y="237" text-anchor="middle" class="s">port pressure</text>
+<rect x="925" y="135" width="235" height="125" class="box" fill="#ffe7bc" stroke="#d98b27"/><text x="1042" y="178" text-anchor="middle" class="h">L2 slice</text><text x="1042" y="210" text-anchor="middle" class="b">line / sector</text><text x="1042" y="237" text-anchor="middle" class="s">hit or miss</text>
+<rect x="1215" y="135" width="130" height="125" class="box" fill="#fbd6bb" stroke="#c35a38"/><text x="1280" y="178" text-anchor="middle" class="h">HBM</text><text x="1280" y="210" text-anchor="middle" class="b">controller</text><text x="1280" y="237" text-anchor="middle" class="s">channel</text>
+<path d="M290 198 L345 198" class="arrow"/><path d="M580 198 L635 198" class="arrow"/><path d="M870 198 L925 198" class="arrow"/><path d="M1160 198 L1215 198" class="arrow"/>
+
+<text x="70" y="330" class="h">对应的可观测问题</text>
+<rect x="60" y="365" width="280" height="185" class="box" fill="#edf5ff" stroke="#4f8ac9"/><text x="200" y="405" text-anchor="middle" class="h">① 请求形状</text><text x="85" y="443" class="b">sectors / request</text><text x="85" y="474" class="b">alignment / stride</text><text x="85" y="505" class="b">active lanes / mask</text><text x="85" y="535" class="s">先查 coalescing 浪费</text>
+<rect x="380" y="365" width="280" height="185" class="box" fill="#f0edff" stroke="#7964c5"/><text x="520" y="405" text-anchor="middle" class="h">② 片上路径</text><text x="405" y="443" class="b">L1 hit / miss</text><text x="405" y="474" class="b">L1→XBAR / return</text><text x="405" y="505" class="b">MIO / scoreboard</text><text x="405" y="535" class="s">端口或依赖可能先满</text>
+<rect x="700" y="365" width="280" height="185" class="box" fill="#eaf7f2" stroke="#3d8f8a"/><text x="840" y="405" text-anchor="middle" class="h">③ L2 后端</text><text x="725" y="443" class="b">hit / throughput</text><text x="725" y="474" class="b">fabric traffic</text><text x="725" y="505" class="b">eviction / locality</text><text x="725" y="535" class="s">共享 ≠ 单体等距离</text>
+<rect x="1020" y="365" width="320" height="185" class="box" fill="#fff1e8" stroke="#c35a38"/><text x="1180" y="405" text-anchor="middle" class="h">④ HBM 结果</text><text x="1045" y="443" class="b">DRAM bytes / % peak</text><text x="1045" y="474" class="b">read / write balance</text><text x="1045" y="505" class="b">outstanding requests</text><text x="1045" y="535" class="s">最后确认是否真是带宽瓶颈</text>
+<path d="M200 550 C200 620 1180 620 1180 550" class="hot"/>
+<rect x="180" y="675" width="1040" height="62" class="box" fill="#fff8e6" stroke="#d98b27"/>
+<text x="700" y="714" text-anchor="middle" class="b">合并良好只说明入口请求形状高效；它不保证 fabric、L2 slice、controller 与 HBM 已被均匀充分驱动。</text>
+</svg>

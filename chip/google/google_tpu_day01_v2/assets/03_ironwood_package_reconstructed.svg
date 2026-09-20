@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="980" viewBox="0 0 1800 980">
 <style>
 text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
-.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}.h{font-size:20px;font-weight:700}.t{font-size:16px}.small{font-size:13px;fill:#5f6368}
+.title{font-size:30px;font-weight:700}.sub{font-size:18px;fill:#5f6368}.h{font-size:20px;font-weight:700}.chiplet{font-size:18px;font-weight:700}.t{font-size:16px}.small{font-size:13px;fill:#5f6368}
 .pkg{fill:#fff;stroke:#5f6368;stroke-width:2;stroke-dasharray:8 6;rx:18}.logic{fill:#fff1df;stroke:#c79043;stroke-width:2;rx:14}.compute{fill:#eaf2ff;stroke:#5f83c7;stroke-width:2;rx:8}.mem{fill:#eaf6e8;stroke:#6d9b63;stroke-width:2;rx:8}.inter{fill:#fff6cc;stroke:#c8a532;stroke-width:2;rx:8}.host{fill:#eee7f7;stroke:#8a70a1;stroke-width:2;rx:8}.mgmt{fill:#f7e6e6;stroke:#a56c6c;stroke-width:2;rx:8}.serdes{fill:#f3eafd;stroke:#8e6ca9;stroke-width:2;stroke-dasharray:7 5;rx:12}.arrow{stroke:#4b5563;stroke-width:2;marker-end:url(#a)}.bi{stroke:#4b5563;stroke-width:2;marker-start:url(#b);marker-end:url(#a)}
 </style>
 <defs>
@@ -24,7 +24,7 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 
 <!-- logic chiplet A -->
 <rect x="365" y="165" width="560" height="650" class="logic"/>
-<text x="390" y="195" class="h">Logic chiplet A · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
+<text x="390" y="195" class="chiplet">Logic chiplet A · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
 <rect x="415" y="225" width="460" height="235" class="compute"/>
 <text x="440" y="255" class="h">TensorCore</text>
 <rect x="590" y="275" width="110" height="60" class="compute"/><text x="625" y="312" class="t">TCS</text>
@@ -37,21 +37,21 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <rect x="415" y="620" width="95" height="60" class="compute"/><text x="430" y="655" class="small">SparseCore</text>
 <rect x="520" y="620" width="95" height="60" class="compute"/><text x="535" y="655" class="small">SparseCore</text>
 <g class="small">
-<rect x="625" y="620" width="58" height="60" class="mem"/><text x="632" y="655">HBM3</text>
-<rect x="690" y="620" width="58" height="60" class="mem"/><text x="697" y="655">HBM3</text>
-<rect x="755" y="620" width="58" height="60" class="mem"/><text x="762" y="655">HBM3</text>
-<rect x="820" y="620" width="58" height="60" class="mem"/><text x="827" y="655">HBM3</text>
+<rect x="625" y="620" width="58" height="60" class="mem"/><text x="638" y="645">HBM3</text><text x="642" y="665">Ctrl</text>
+<rect x="690" y="620" width="58" height="60" class="mem"/><text x="703" y="645">HBM3</text><text x="707" y="665">Ctrl</text>
+<rect x="755" y="620" width="58" height="60" class="mem"/><text x="768" y="645">HBM3</text><text x="772" y="665">Ctrl</text>
+<rect x="820" y="620" width="58" height="60" class="mem"/><text x="833" y="645">HBM3</text><text x="837" y="665">Ctrl</text>
 </g>
 <g class="small">
-<rect x="625" y="720" width="58" height="55" class="mem"/><text x="629" y="751">stack</text>
-<rect x="690" y="720" width="58" height="55" class="mem"/><text x="694" y="751">stack</text>
-<rect x="755" y="720" width="58" height="55" class="mem"/><text x="759" y="751">stack</text>
-<rect x="820" y="720" width="58" height="55" class="mem"/><text x="824" y="751">stack</text>
+<rect x="625" y="720" width="58" height="55" class="mem"/><text x="629" y="742">HBM3E</text><text x="638" y="760">stack</text>
+<rect x="690" y="720" width="58" height="55" class="mem"/><text x="694" y="742">HBM3E</text><text x="703" y="760">stack</text>
+<rect x="755" y="720" width="58" height="55" class="mem"/><text x="759" y="742">HBM3E</text><text x="768" y="760">stack</text>
+<rect x="820" y="720" width="58" height="55" class="mem"/><text x="824" y="742">HBM3E</text><text x="833" y="760">stack</text>
 </g>
 
 <!-- logic chiplet B -->
 <rect x="950" y="165" width="560" height="650" class="logic"/>
-<text x="975" y="195" class="h">Logic chiplet B · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
+<text x="975" y="195" class="chiplet">Logic chiplet B · 1 TensorCore + 2 SparseCore + 96 GB HBM</text>
 <rect x="1000" y="225" width="460" height="235" class="compute"/>
 <text x="1025" y="255" class="h">TensorCore</text>
 <rect x="1175" y="275" width="110" height="60" class="compute"/><text x="1210" y="312" class="t">TCS</text>
@@ -64,21 +64,21 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <rect x="1000" y="620" width="95" height="60" class="compute"/><text x="1015" y="655" class="small">SparseCore</text>
 <rect x="1105" y="620" width="95" height="60" class="compute"/><text x="1120" y="655" class="small">SparseCore</text>
 <g class="small">
-<rect x="1210" y="620" width="58" height="60" class="mem"/><text x="1217" y="655">HBM3</text>
-<rect x="1275" y="620" width="58" height="60" class="mem"/><text x="1282" y="655">HBM3</text>
-<rect x="1340" y="620" width="58" height="60" class="mem"/><text x="1347" y="655">HBM3</text>
-<rect x="1405" y="620" width="58" height="60" class="mem"/><text x="1412" y="655">HBM3</text>
+<rect x="1210" y="620" width="58" height="60" class="mem"/><text x="1223" y="645">HBM3</text><text x="1227" y="665">Ctrl</text>
+<rect x="1275" y="620" width="58" height="60" class="mem"/><text x="1288" y="645">HBM3</text><text x="1292" y="665">Ctrl</text>
+<rect x="1340" y="620" width="58" height="60" class="mem"/><text x="1353" y="645">HBM3</text><text x="1357" y="665">Ctrl</text>
+<rect x="1405" y="620" width="58" height="60" class="mem"/><text x="1418" y="645">HBM3</text><text x="1422" y="665">Ctrl</text>
 </g>
 <g class="small">
-<rect x="1210" y="720" width="58" height="55" class="mem"/><text x="1214" y="751">stack</text>
-<rect x="1275" y="720" width="58" height="55" class="mem"/><text x="1279" y="751">stack</text>
-<rect x="1340" y="720" width="58" height="55" class="mem"/><text x="1344" y="751">stack</text>
-<rect x="1405" y="720" width="58" height="55" class="mem"/><text x="1409" y="751">stack</text>
+<rect x="1210" y="720" width="58" height="55" class="mem"/><text x="1214" y="742">HBM3E</text><text x="1223" y="760">stack</text>
+<rect x="1275" y="720" width="58" height="55" class="mem"/><text x="1279" y="742">HBM3E</text><text x="1288" y="760">stack</text>
+<rect x="1340" y="720" width="58" height="55" class="mem"/><text x="1344" y="742">HBM3E</text><text x="1353" y="760">stack</text>
+<rect x="1405" y="720" width="58" height="55" class="mem"/><text x="1409" y="742">HBM3E</text><text x="1418" y="760">stack</text>
 </g>
 
 <!-- D2D -->
 <line x1="925" y1="535" x2="950" y2="535" class="bi"/>
-<text x="855" y="445" class="small">D2D: ~6× bandwidth of one 1D ICI link</text>
+<text x="937" y="483" text-anchor="middle" class="small">D2D: ~6× bandwidth of one 1D ICI link</text>
 
 <!-- serdes -->
 <rect x="1535" y="285" width="165" height="390" class="serdes"/>

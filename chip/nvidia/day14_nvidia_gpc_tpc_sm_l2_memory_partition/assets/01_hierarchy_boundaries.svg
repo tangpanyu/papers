@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+<defs><marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker><style>
+text{font-family:Arial,"Noto Sans SC",sans-serif;fill:#172033}.title{font-size:30px;font-weight:700}.sub{font-size:16px;fill:#526579}.h{font-size:23px;font-weight:700}.b{font-size:18px}.s{font-size:15px;fill:#526579}.box{stroke-width:2.5;rx:16}.arrow{stroke:#334155;stroke-width:3.5;fill:none;marker-end:url(#arrow)}.dashed{stroke:#64748b;stroke-width:3;stroke-dasharray:9 7;fill:none}
+</style></defs>
+<rect width="1400" height="820" fill="#f7fafc"/>
+<text x="700" y="48" text-anchor="middle" class="title">GH100 / H100：计算层级与共享后端是两条轴</text>
+<text x="700" y="78" text-anchor="middle" class="sub">教学重绘 / schematic / not to scale；片上 fabric、地址 hash 与真实 floorplan 未公开</text>
+
+<rect x="55" y="125" width="590" height="560" class="box" fill="#e9f3ff" stroke="#4f8ac9"/>
+<text x="85" y="165" class="h">计算复制与协作边界</text>
+<rect x="95" y="205" width="510" height="390" class="box" fill="#d7eaff" stroke="#6da6dc"/>
+<text x="125" y="245" class="h">GPC × 8（full GH100）</text>
+<text x="125" y="275" class="b">Hopper cluster 的同一 GPC 保证</text>
+<rect x="135" y="320" width="430" height="205" class="box" fill="#c1def7" stroke="#6da6dc"/>
+<text x="165" y="360" class="h">TPC × 9 / GPC（full die）</text>
+<text x="165" y="390" class="b">物理复制单元；普通 launch 不指定 TPC</text>
+<rect x="180" y="430" width="160" height="68" class="box" fill="#a9d2f2" stroke="#6da6dc"/>
+<rect x="360" y="430" width="160" height="68" class="box" fill="#a9d2f2" stroke="#6da6dc"/>
+<text x="260" y="459" text-anchor="middle" class="h">SM 0</text><text x="440" y="459" text-anchor="middle" class="h">SM 1</text>
+<text x="260" y="484" text-anchor="middle" class="s">register / L1 / shared</text><text x="440" y="484" text-anchor="middle" class="s">register / L1 / shared</text>
+<path d="M260 430 C260 395 440 395 440 430" class="dashed"/>
+<text x="350" y="610" text-anchor="middle" class="s">GPC-local SM-to-SM path：cluster / DSM</text>
+
+<rect x="755" y="125" width="590" height="560" class="box" fill="#fff3df" stroke="#d98b27"/>
+<text x="785" y="165" class="h">按地址切片的共享存储后端</text>
+<rect x="815" y="220" width="470" height="105" class="box" fill="#ffe6ba" stroke="#d98b27"/>
+<text x="1050" y="260" text-anchor="middle" class="h">L2 slices / partitions</text>
+<text x="1050" y="291" text-anchor="middle" class="b">逻辑共享；物理切片；GPU-wide coherence</text>
+<rect x="815" y="385" width="470" height="105" class="box" fill="#fbd499" stroke="#d98b27"/>
+<text x="1050" y="425" text-anchor="middle" class="h">memory controllers / channels</text>
+<text x="1050" y="456" text-anchor="middle" class="b">地址映射后的带宽归属</text>
+<rect x="815" y="550" width="470" height="78" class="box" fill="#f5c56f" stroke="#d98b27"/>
+<text x="1050" y="598" text-anchor="middle" class="h">HBM stacks</text>
+<path d="M645 390 C710 390 745 272 815 272" class="arrow"/>
+<text x="710" y="345" text-anchor="middle" class="s">global-memory request / fabric</text>
+<path d="M1050 325 L1050 385" class="arrow"/><path d="M1050 490 L1050 550" class="arrow"/>
+
+<rect x="210" y="725" width="980" height="58" class="box" fill="#eef6ee" stroke="#6aa477"/>
+<text x="700" y="760" text-anchor="middle" class="b">关键边界：GPC → TPC → SM 是计算层级；L2 → controller → HBM 是共享后端。两者相连，但不是一棵简单父子树。</text>
+</svg>

@@ -1,15 +1,22 @@
 # Google TPU Day 5：Mosaic 编译链——Pallas 到 TPU executable 的责任边界
 
 - 日期：2026-09-02
+- 资料复核：2026-09-08（动态产品、规格与 API 状态以该日页面为准）
 - 预计学习时间：约 30 分钟
 - 承接：Day 4 已把 `BlockSpec → physical layout → MXU tiling` 分成三层；今天只追踪这些信息进入 compiler 后分别在哪一段被处理。
-- 资料状态：截至 2026-09-02。Pallas 仍是 experimental；Google 未完整公开的 TPU backend/assembly 细节统一标为 `not disclosed`。
+- 资料状态：截至 2026-09-08 复核（原成稿日期：2026-09-02）。Pallas 仍是 experimental；Google 未完整公开的 TPU backend/assembly 细节统一标为 `not disclosed`。
 
 ## 今日目标
 
 能口述 `Pallas → Jaxpr → Mosaic MLIR → LLO → TPU backend`；知道 layout/pipeline 主要在哪层暴露；知道为什么中间 IR 不一定已经出现最终 DMA。
 
 ## 1. 编译边界
+
+先看 JAX 官方给出的 Pallas lowering path：同一份 Python/Jaxpr 可以分流到不同后端，TPU 路径进入 Mosaic。该图是官方编译路径总览，下面的自绘图再把 LLO 与未公开的 TPU backend 边界展开。注意：图中的 **Pallas→Triton GPU 分支是历史设计快照，当前文档已标为 officially deprecated；GPU 现行路径是 Mosaic GPU**。本文只沿仍适用的 TPU→Mosaic 分支阅读。
+
+![JAX 官方 Pallas lowering path](assets/01_pallas_lowering_path_official.png)
+
+来源：[JAX Pallas Design](https://docs.jax.dev/en/latest/pallas/design/design.html)，[原始 PNG @ JAX commit `02fed78`](https://github.com/jax-ml/jax/blob/02fed78da8636337dcc051079c03947cd9949908/docs/_static/pallas/pallas_flow.png)。图中 Triton 分支保留作历史对照；当前 GPU 后端应看 Mosaic GPU。本地副本与许可记录见 `assets/REMOTE_IMAGES.md`。
 
 ![Mosaic 编译链解释图](assets/02_mosaic_pipeline_schematic.svg)
 
@@ -71,14 +78,14 @@ Mosaic 不是最终 TPU machine-code assembler。最终 proprietary pass graph�
 
 ## 5. 反直觉点：DMA 可以到很晚才 materialize
 
-公开的 Pallas/Mosaic DMA lowering 讨论说明，某些 memory-movement semantics 在较早阶段已经确定，但最终 DMA 形式可以在更晚的 TPU compilation 阶段才 inline/materialize。
+公开的 Pallas/Mosaic DMA lowering 讨论说明，某些 memory-movement semantics 在较早阶段已经确定，但最终 DMA 形式可以在更晚的 TPU compilation 阶段才 inline/materialize。这是维护者讨论中的实现观察，不是稳定的 API contract。
 
 因此：
 
 ```text
 memory movement 已经被 schedule
 ≠
-当前 Mosaic/HLO dump 已经出现最终 DMA instruction
+当前中间 IR dump 已经出现最终 DMA instruction
 ```
 
 这连接 Day 3：`BlockSpec` / pipeline 已经规定 HBM↔VMEM 的工作方式，但不能仅凭中间 IR 没出现 DMA 就判断“没有 DMA”。
@@ -151,11 +158,12 @@ TPU kernel 优化仍然需要硬件意识，只是抓手更多表现为“让 co
 2. 能解释为什么 `BlockSpec` 已表达搬运语义，但中间 dump 未必已有最终 DMA。
 3. 遇到 `shape_cast/relayout` 错误时，知道它属于 logical representation 到 physical TPU layout 的 lowering 问题。
 
-**下一课：Google TPU Day 6 —— 片内通信与 TensorCore 内部数据供给。**
+**下一课：Day 06｜正式 SGLang：Full Attention 差异闭环与 MLA / DSA Latent Cache。**
 
 ## 参考资料
 
 1. [JAX — Pallas Design](https://docs.jax.dev/en/latest/pallas/design/design.html)
-2. [JAX — Pallas debugging](https://github.com/jax-ml/jax/blob/main/jax/experimental/pallas/g3doc/debugging.md)
-3. [JAX — Mosaic TPU source](https://github.com/jax-ml/jax/tree/main/jax/_src/pallas/mosaic)
+2. [JAX — Pallas debugging @ `02fed78`](https://github.com/jax-ml/jax/blob/02fed78da8636337dcc051079c03947cd9949908/jax/experimental/pallas/g3doc/debugging.md)
+3. [JAX — Mosaic TPU source @ `02fed78`](https://github.com/jax-ml/jax/tree/02fed78da8636337dcc051079c03947cd9949908/jax/_src/pallas/mosaic)
 4. [JAX Discussion #26962 — Lowering of Pallas Kernel and DMAs](https://github.com/jax-ml/jax/discussions/26962)
+5. [JAX Pallas Design — lowering path figure](https://docs.jax.dev/en/latest/pallas/design/design.html)

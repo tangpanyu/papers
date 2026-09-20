@@ -19,11 +19,11 @@
   </defs>
 
   <rect width="1800" height="780" fill="#f7f9fc"/>
-  <text x="60" y="60" class="title">SGLang Full Attention: the exact delta from the Day05 vLLM model</text>
+  <text x="60" y="60" class="title">SGLang Full Attention: the delta from a vLLM-style conceptual model</text>
   <text x="60" y="93" class="small">Self-drawn summary · page_size = 64 · dashed blue = metadata/address · solid red = tensor write · green = ownership/lifecycle</text>
 
   <rect x="50" y="125" width="470" height="235" rx="20" fill="#eef1f6" stroke="#aab4c4" class="card" filter="url(#shadow)"/>
-  <text x="80" y="164" class="section">Day05 vLLM bridge</text>
+  <text x="80" y="164" class="section">vLLM conceptual bridge</text>
   <rect x="80" y="188" width="410" height="66" rx="13" fill="#ffffff" stroke="#b8c1d0"/>
   <text x="100" y="218" class="label">block table</text>
   <text x="100" y="244" class="mono">logical block 0,1 → physical block 11,41</text>
@@ -70,10 +70,11 @@
   <text x="730" y="543" class="mono">K/V[L][slot, H, D]</text>
   <text x="730" y="570" class="body">requests own slots</text>
 
-  <rect x="1110" y="480" width="265" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
+  <rect x="1110" y="480" width="265" height="135" rx="15" fill="#ffffff" stroke="#79bf9d"/>
   <text x="1135" y="512" class="label">finish</text>
-  <text x="1135" y="543" class="body">Radix insert; row free</text>
-  <text x="1135" y="570" class="body">cached ≠ allocator-free</text>
+  <text x="1135" y="543" class="body">optional insert (is_insert)</text>
+  <text x="1135" y="570" class="body">row free; lock_ref--</text>
+  <text x="1135" y="594" class="small">cached ≠ allocator-free</text>
 
   <rect x="1430" y="480" width="270" height="120" rx="15" fill="#ffffff" stroke="#79bf9d"/>
   <text x="1455" y="512" class="label">evict / reuse</text>

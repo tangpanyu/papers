@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+<defs><marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker><style>
+text{font-family:Arial,"Noto Sans SC",sans-serif;fill:#172033}.title{font-size:30px;font-weight:700}.sub{font-size:16px;fill:#526579}.h{font-size:21px;font-weight:700}.b{font-size:17px}.s{font-size:15px;fill:#526579}.box{stroke-width:2.5;rx:15}.arrow{stroke:#334155;stroke-width:3.5;fill:none;marker-end:url(#arrow)}.warn{fill:#a33a2a;font-size:16px;font-weight:700}
+</style></defs>
+<rect width="1400" height="820" fill="#f7fafc"/>
+<text x="700" y="48" text-anchor="middle" class="title">一次 global load：从 warp 请求到 HBM 后端</text>
+<text x="700" y="78" text-anchor="middle" class="sub">教学重绘 / schematic / not to scale；address hash、router topology 与 arbitration 未公开</text>
+
+<rect x="55" y="135" width="235" height="125" class="box" fill="#dceeff" stroke="#4f8ac9"/>
+<text x="172" y="178" text-anchor="middle" class="h">warp + LSU</text><text x="172" y="210" text-anchor="middle" class="b">active lanes / addresses</text><text x="172" y="237" text-anchor="middle" class="s">请求形状从这里产生</text>
+<rect x="345" y="135" width="235" height="125" class="box" fill="#c9e4fb" stroke="#4f8ac9"/>
+<text x="462" y="178" text-anchor="middle" class="h">L1TEX</text><text x="462" y="210" text-anchor="middle" class="b">coalescing → request / sector</text><text x="462" y="237" text-anchor="middle" class="s">L1 hit 或 miss</text>
+<rect x="635" y="135" width="235" height="125" class="box" fill="#e8e1ff" stroke="#7964c5"/>
+<text x="752" y="178" text-anchor="middle" class="h">XBAR / fabric</text><text x="752" y="210" text-anchor="middle" class="b">route to home slice</text><text x="752" y="237" text-anchor="middle" class="s">port / queue pressure</text>
+<rect x="925" y="135" width="235" height="125" class="box" fill="#ffe7bc" stroke="#d98b27"/>
+<text x="1042" y="178" text-anchor="middle" class="h">L2 slice / LTS</text><text x="1042" y="210" text-anchor="middle" class="b">128 B line / 32 B sector</text><text x="1042" y="237" text-anchor="middle" class="s">hit returns; miss continues</text>
+<rect x="1215" y="135" width="130" height="125" class="box" fill="#fbd6bb" stroke="#c35a38"/>
+<text x="1280" y="178" text-anchor="middle" class="h">HBM</text><text x="1280" y="210" text-anchor="middle" class="b">controller</text><text x="1280" y="237" text-anchor="middle" class="s">channel</text>
+<path d="M290 198 L345 198" class="arrow"/><path d="M580 198 L635 198" class="arrow"/><path d="M870 198 L925 198" class="arrow"/><path d="M1160 198 L1215 198" class="arrow"/>
+
+<text x="65" y="330" class="h">L2 miss：同一请求会按地址落到某个后端分区</text>
+<rect x="80" y="375" width="260" height="105" class="box" fill="#fff0d5" stroke="#d98b27"/><text x="210" y="417" text-anchor="middle" class="h">partition / controller 0</text><text x="210" y="449" text-anchor="middle" class="b">queue → HBM channel</text>
+<rect x="390" y="375" width="260" height="105" class="box" fill="#fff0d5" stroke="#d98b27"/><text x="520" y="417" text-anchor="middle" class="h">partition / controller 1</text><text x="520" y="449" text-anchor="middle" class="b">queue → HBM channel</text>
+<rect x="700" y="375" width="260" height="105" class="box" fill="#fff0d5" stroke="#d98b27"/><text x="830" y="417" text-anchor="middle" class="h">partition / controller 2</text><text x="830" y="449" text-anchor="middle" class="b">queue → HBM channel</text>
+<rect x="1010" y="375" width="260" height="105" class="box" fill="#f4f7fa" stroke="#94a3b8"/><text x="1140" y="417" text-anchor="middle" class="h">… more partitions</text><text x="1140" y="449" text-anchor="middle" class="b">parallel backends</text>
+<path d="M1042 260 C1042 320 210 320 210 375" class="arrow"/><path d="M1042 260 C1042 340 520 340 520 375" class="arrow"/><path d="M1042 260 C1042 340 830 340 830 375" class="arrow"/><path d="M1042 260 C1042 320 1140 320 1140 375" class="arrow"/>
+
+<rect x="80" y="555" width="1190" height="165" class="box" fill="#eef6ee" stroke="#6aa477"/>
+<text x="110" y="595" class="h">性能含义</text>
+<text x="110" y="635" class="b">均匀分布：多个 L2 slice / controller 并行服务请求，聚合带宽才有机会提高。</text>
+<text x="110" y="670" class="b">partition camping：stride 或 base mapping 把流量集中到少数后端，队列变长，HBM 峰值却可能很高。</text>
+<text x="110" y="705" class="warn">这张图只表达“请求形状 → 地址分区 → 后端队列”的关系，不给出隐藏 hash 或物理 router 布局。</text>
+</svg>

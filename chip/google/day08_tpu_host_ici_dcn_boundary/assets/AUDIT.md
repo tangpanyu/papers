@@ -1,0 +1,5 @@
+Round 1 factual: GA date and TPU7x VM/HBM/ICI/DCN specs checked against current Google Cloud first-party docs.
+Round 2 semantic: host RAM, TPU HBM, ICI and DCN separated; the TPU7x host attachment is identified at the officially stated `PCIe network` level. The Ironwood package figure is separately recorded as showing host `PCIe Gen5 x16` and management `PCIe Gen2 x1`; no aggregate/usable bandwidth, lane mapping/NUMA affinity or encoding is inferred from those labels.
+Round 3 rendering: both SVGs checked for labels, arrows and canvas bounds; the workload path labels the host attachment as `PCIe network`, and the ICI headline preserves the official bidirectional-bandwidth scope; unpublished attachment details remain marked not disclosed.
+
+The official generic TPU VM architecture image is stored as `03_tpu_vm_architecture_official.png` and attributed in `REMOTE_IMAGES.md`. In `01_host_ici_dcn.svg`, the DCN path is routed below the chip box so it cannot be mistaken for a host-to-chip attachment; the PCIe footnote now distinguishes the package-figure labels from TPU7x prose that omits performance and affinity details.

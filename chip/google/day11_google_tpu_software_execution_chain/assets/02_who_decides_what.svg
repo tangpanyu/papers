@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="720">
+<rect width="100%" height="100%" fill="white"/>
+<text x="690" y="38" text-anchor="middle" font-family="sans-serif" font-size="28">Who decides what? Software ownership of TPU execution</text>
+<text x="690" y="64" text-anchor="middle" font-family="sans-serif" font-size="13">schematic / not to scale / public software-visible responsibilities</text>
+<g font-family="sans-serif">
+<rect x="60" y="115" width="285" height="470" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="202" y="155" text-anchor="middle" font-size="21">Model author</text>
+<text x="202" y="205" text-anchor="middle" font-size="15">math / modules</text>
+<text x="202" y="240" text-anchor="middle" font-size="15">Mesh axes</text>
+<text x="202" y="275" text-anchor="middle" font-size="15">sharding hints / specs</text>
+<text x="202" y="310" text-anchor="middle" font-size="15">custom Pallas kernel</text>
+<text x="202" y="345" text-anchor="middle" font-size="15">algorithmic parallelism</text>
+
+<rect x="385" y="115" width="285" height="470" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="527" y="155" text-anchor="middle" font-size="21">JAX / Shardy / XLA</text>
+<text x="527" y="205" text-anchor="middle" font-size="15">global→local partitioning</text>
+<text x="527" y="240" text-anchor="middle" font-size="15">resharding collectives</text>
+<text x="527" y="275" text-anchor="middle" font-size="15">fusion / layout</text>
+<text x="527" y="310" text-anchor="middle" font-size="15">buffer allocation</text>
+<text x="527" y="345" text-anchor="middle" font-size="15">target-specific codegen</text>
+
+<rect x="710" y="115" width="285" height="470" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="852" y="155" text-anchor="middle" font-size="21">Runtime / Pathways</text>
+<text x="852" y="205" text-anchor="middle" font-size="15">device assignment</text>
+<text x="852" y="240" text-anchor="middle" font-size="15">load / execute executable</text>
+<text x="852" y="275" text-anchor="middle" font-size="15">async dispatch</text>
+<text x="852" y="310" text-anchor="middle" font-size="15">gang scheduling</text>
+<text x="852" y="345" text-anchor="middle" font-size="15">cross-host orchestration</text>
+
+<rect x="1035" y="115" width="285" height="470" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="1177" y="155" text-anchor="middle" font-size="21">Hardware</text>
+<text x="1177" y="205" text-anchor="middle" font-size="15">MXU / VPU execution</text>
+<text x="1177" y="240" text-anchor="middle" font-size="15">HBM / VMEM movement</text>
+<text x="1177" y="275" text-anchor="middle" font-size="15">SparseCore / CAE</text>
+<text x="1177" y="310" text-anchor="middle" font-size="15">ICI links / routing</text>
+<text x="1177" y="345" text-anchor="middle" font-size="15">physical topology</text>
+
+<text x="690" y="645" text-anchor="middle" font-size="16">Key boundary: the model author specifies semantics and placement intent; compiler/runtime turn that intent into concrete collectives, buffers, executables and device activity.</text>
+</g></svg>

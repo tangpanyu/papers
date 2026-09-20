@@ -1,9 +1,10 @@
 # Google TPU Day 7：ICI、64-chip Cube、3D Torus 与 OCS——Ironwood 怎么扩到 9,216 chips
 
-- 日期：2026-09-04
+- 日期：2026-09-18
+- 资料复核：2026-09-18（TPU7x 与 TPU system architecture 页面最近更新到 2026-09-16；动态产品、规格与拓扑/API 状态以本次核对为准）
 - 预计学习时间：约 30 分钟
-- 承接：Day 6 已建立 `local memory → on-package D2D → inter-chip ICI` 三层。今天只继续 ICI 这一层：先看 64-chip cube 内为什么是 3D torus，再看 OCS 为什么出现在 cube 之外。
-- 状态与可信度：Ironwood/TPU7x 已在 Google Cloud 正式提供；64-chip cube、3D torus、每 chip 六个邻居、OCS 跨 cube、9,216-chip/144-cube superpod 均来自 Google Cloud 官方资料，可信度高。OCS 内部交换矩阵、路由算法与具体光链路物理实现没有在本文引用的一手资料中完整公开，标为 `not disclosed`。
+- 承接：Day 6 先从正式 SGLang 的 MLA/DSA latent cache 追踪 persistent state 与 physical loc；今天把视角切回 TPU 系统互连，先看 64-chip cube 内为什么是 3D torus，再看 OCS 为什么出现在 cube 之外。
+- 状态与可信度：截至 2026-09-18 复核，Ironwood/TPU7x 已在 Google Cloud 正式提供；64-chip cube、3D torus、OCS 跨 cube、9,216-chip superpod 均来自 Google Cloud 官方资料，可信度高。小 slice 的退化边界、邻居重复与具体实现细节不在本文展开。OCS 内部交换矩阵、路由算法与具体光链路物理实现没有在本文引用的一手资料中完整公开，标为 `not disclosed`。
 
 ## 今日目标
 
@@ -13,7 +14,9 @@
 
 Google Cloud 官方把 `4×4×4 = 64 chips` 定义为一个 TPU cube。Ironwood 每个物理 host 连接 4 颗 TPU，因此一个 64-chip cube 对应 16 个 host。Google 当前 GKE 规划文档还公开列出了 `4×4×4`、`4×4×8`、`4×8×8`、`8×8×8`、`8×8×16`、`8×16×16` 等 Ironwood slice 拓扑。
 
-![Google Cloud 官方：Ironwood slice / OCS topology](https://storage.googleapis.com/gweb-cloudblog-publish/images/2_VdZkL7j.max-1400x1400.jpg)
+![Google Cloud 官方：Ironwood slice / OCS topology](assets/01_ironwood_slice_topologies_official.jpg)
+
+图中示例的 `4×8×4` 是官方示意图采用的轴标法；当前配置表的 canonical 写法是 `4×4×8`，且系统对拓扑轴有排序/形状约束。这里不把示意轴名当成额外可申请型号，也不据此推断 Cloud API 接受 `4×8×4` 这一写法。图片来源与许可边界见 `assets/REMOTE_IMAGES.md`。
 
 **怎么看：**
 
@@ -24,9 +27,11 @@ Google Cloud 官方把 `4×4×4 = 64 chips` 定义为一个 TPU cube。Ironwood 
 
 ## 2. Cube 内：3D Torus 到底意味着什么
 
-Google 官方说明 cube 内每颗 Ironwood chip 通过多个高速 ICI link 组成 direct 3D torus，每颗 chip 连接 6 个邻居，对应三个轴的正、负方向。
+Google 官方说明完整 cube/典型 3D torus 节点通过多个高速 ICI link 连接三个轴的正、负方向，即 6 个方向邻接；在 `2×2×1`、`2×2×2` 等小 slice 中，边界/退化和重复邻居按具体拓扑实现处理。
 
-![Google Cloud 官方：Ironwood 3D torus](https://storage.googleapis.com/gweb-cloudblog-publish/images/3_KvozMKZ.max-1100x1100.png)
+![Google Cloud 官方：Ironwood 3D torus](assets/02_ironwood_3d_torus_official.png)
+
+这张图只用于说明三维坐标和 wrap-around 邻接；带宽数字仍以 TPU7x 规格表的作用域为准，不从图中节点编号推导额外硬件参数。
 
 **怎么看：**
 
@@ -83,7 +88,7 @@ Google 的 Ironwood 文档强调 OCS fabric manager 可以在故障时绕开 unh
 
 Cloud TPU 的 `slice` 是一组通过 ICI 连在一起、供一个 workload 使用的 TPU chips。对于 3D topology，slice 由 `A×B×C` 指定。
 
-当前 GKE 文档给出的 Ironwood例子包括：
+当前 GKE 文档给出的 Ironwood 例子包括：
 
 | Topology | Chips | Hosts | Cubes |
 |---|---:|---:|---:|
@@ -100,7 +105,7 @@ Cloud TPU 的 `slice` 是一组通过 ICI 连在一起、供一个 workload 使�
 
 Pallas 官方 all-gather 教程直接假设 ring topology：每轮从左邻居接收一个 shard，再把已有 shard 发给右邻居，经过 `N-1` 轮后所有 device 都得到完整 array。
 
-这和 torus 的关系非常直接：沿 torus 任一轴取一维，就得到 ring。因此一个 3D mesh 可以把不同 collective 分配到不同轴，而不是所有流量都挤同一组 link。
+这和 torus 的关系非常直接：沿 torus 任一轴取一维，就得到 ring。因此一个 3D torus/slice 可以把不同 collective 分配到不同轴，而不是所有流量都挤同一组 link。
 
 对于大规模训练，可以把问题抽象成：
 
@@ -170,7 +175,7 @@ expert group 映射到哪些 TPU mesh axes？
 ## 容易混淆的点
 
 1. **Cube = Slice？** 不是。cube 固定是 `4×4×4 = 64 chips` building block；slice 可以小于、等于或跨多个 cube。
-2. **3D torus = 每颗 chip 直接连接所有 chip？** 不是。每颗 chip 有 6 个直接邻居，非邻居流量需要 routing。
+2. **3D torus = 每颗 chip 直接连接所有 chip？** 不是。完整 cube/典型 torus 节点有 6 个方向邻接，非邻居流量需要 routing；小 slice 的退化边界不能机械套用“6 个不同邻居”。
 3. **OCS = 普通 Ethernet switch？** 不是。这里的核心是可重构 optical circuit。
 4. **9,216 chips 都在一个 copper torus？** 不是。cube 内 copper ICI；cube 间通过 optical links/OCS 扩展。
 5. **remote DMA 能发任意 peer，所以 topology 不重要？** 恰好相反。Pallas 文档明确提醒非邻居 routing 的 contention 不受 kernel writer 控制。
@@ -201,7 +206,7 @@ larger scale uses DCN
 
 ## 参考资料
 
-1. Google Cloud, “From silicon to softmax: Inside the Ironwood AI stack”, 2025-11-06：https://cloud.google.com/blog/products/compute/inside-the-ironwood-tpu-codesigned-ai-stack/
+1. Google Cloud, “Inside the Ironwood TPU codesigned AI stack”, 2025-11-06：https://cloud.google.com/blog/products/compute/inside-the-ironwood-tpu-codesigned-ai-stack/
 2. Google Cloud Documentation, “TPU system architecture”, 2026-08 更新：https://docs.cloud.google.com/tpu/docs/system-architecture-tpu-vm
 3. Google Kubernetes Engine Documentation, “Plan TPUs in GKE”, 2026-08/09 更新：https://docs.cloud.google.com/kubernetes-engine/docs/concepts/plan-tpus
 4. JAX Documentation, “Distributed Computing in Pallas for TPUs”：https://docs.jax.dev/en/latest/pallas/tpu/distributed.html

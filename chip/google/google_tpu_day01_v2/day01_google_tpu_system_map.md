@@ -1,6 +1,7 @@
 # Google TPU Day 1：先建立芯片、Package、VM、Slice、Pod 的完整地图
 
 - 日期：2026-08-26
+- 资料复核：2026-09-08（动态产品、规格与 API 状态以该日页面为准）
 - 预计学习时间：50～60 分钟
 - 今日范围：产品线、代际、当前进度、`die/chiplet → package → host → slice → pod`
 - 今日不展开：MXU/VPU/XLU/SparseCore 的执行细节、VMEM/HBM 数据路径、ICI/Boardfly/Virgo 拓扑细节、XLA/Pallas 软件栈。后面逐天拆。
@@ -22,7 +23,7 @@
 - 不背参数表，也能讲清 TPU v1 → Ironwood → TPU 8 的演进主线；
 - 准确区分 `chiplet / chip / device / VM / slice / Pod`；
 - 看 Ironwood 官方架构图时，知道 Host、PCIe、TensorCore、SparseCore、HBM、SerDes chiplet、ICI 分别处在哪一层；
-- 理解为什么 Google 到 TPU 8 开始明确拆成 training-oriented `8t` 与 inference-oriented `8i`。
+- 理解为什么 Google 到 TPU 8 开始明确拆成 training-oriented `8t` 与 serving/post-training-oriented `8i`。
 
 ---
 
@@ -36,12 +37,12 @@
 
 - 第一处变化是 `v1 → v2/v3`：TPU 从 inference ASIC 变成训练基础设施的一部分。
 - 第二处变化是 `v4/v5`：单颗芯片不再是主要产品单位，`chip + ICI + Pod` 才是完整系统。
-- 第三处变化是 `v5e/v5p` 之后的产品分层，以及 TPU 8 正式拆成 `8t / 8i` 两套不同优化目标。
+- 第三处变化是 `v5e/v5p` 之后的产品分层，以及 TPU 8 正式拆成 `8t / 8i` 两套不同优化目标（训练与 serving/post-training）。
 - 这是一张教学时间线，不表示不同代际之间存在严格的硬件继承箭头。
 
 ### 1.1 TPU v1：一开始就是数据中心专用推理 ASIC
 
-Google 2017 年公开的第一代 TPU是 28 nm、700 MHz、约 40 W，通过 PCIe Gen3 x16 接入现有服务器。官方资料给出的核心设计是一个 `65,536` 个 8-bit MAC 的矩阵乘单元，以及大约 `28 MiB` 的软件管理片上存储。
+第一代 TPU 于 2015 年部署、2016 年对外公布；本文采用 2017 年详细架构/性能资料中的参数：28 nm、700 MHz、约 40 W，通过 PCIe Gen3 x16 接入现有服务器。官方资料给出的核心设计是一个 `65,536` 个 8-bit MAC 的矩阵乘单元，以及大约 `28 MiB` 的软件管理片上存储。
 
 今天不用研究 systolic array，只记住一个架构思想：
 
@@ -53,6 +54,8 @@ Google 2017 年公开的第一代 TPU是 28 nm、700 MHz、约 40 W，通过 PCI
 
 - [An in-depth look at Google’s first TPU](https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu)
 - [In-Datacenter Performance Analysis of a Tensor Processing Unit, ISCA 2017](https://research.google/pubs/in-datacenter-performance-analysis-of-a-tensor-processing-unit/)
+
+时间线里的“2015 部署”与这里的“2016/2017 公布和详细资料”是不同事件，不应当当作日期冲突。
 
 ### 1.2 TPU v2/v3：从“推理卡”变成训练系统
 
@@ -100,7 +103,7 @@ Trillium 的 API/技术名是 `v6e`。它已经 GA。
 
 ### 1.5 TPU7x / Ironwood
 
-截至 2026-08-26，Google Cloud 当前真正 GA 的最新 TPU 是：
+截至 2026-09-08（本次复核日），Google Cloud 当前真正 GA 的最新 TPU 是：
 
 `TPU7x / Ironwood`
 
@@ -125,14 +128,18 @@ Google Cloud release notes 记录 Ironwood：
 
 ## 2. 今天最关键的一张图：Ironwood package 里面到底是什么
 
-Google 官方 TPU7x 文档有一张非常好的 `Ironwood architecture diagram`。当前执行环境没法可靠把 Google 静态原图直接落盘，所以这里没有只留一个外链，而是严格依据官方图和官方文字重绘了一张解释版 SVG。
+Google 官方 TPU7x 文档有一张非常好的 `Ironwood architecture diagram`。先看官方原图，再看下面为教学标注而重绘的解释版；原图固定在本地，避免文档离线时失效。
+
+![Google Cloud 官方 Ironwood architecture diagram](assets/05_ironwood_architecture_official.png)
+
+来源：[TPU7x (Ironwood) official documentation](https://docs.cloud.google.com/tpu/docs/tpu7x)，[原图静态文件](https://docs.cloud.google.com/static/tpu/docs/images/ironwood-architecture.png)。官方图保留原始标注；下图才是为了本课层级说明而重绘的 schematic。
 
 ![Ironwood package 重绘](assets/03_ironwood_package_reconstructed.svg)
 
 **怎么看这张图：**
 
 - 最外层虚线表示一个 `TPU7x chip/package` 的教学边界，不是 die floorplan。
-- 中间有两个独立 compute/logic chiplet。Google 官方明确写：**每个 chiplet = 1 TensorCore + 2 SparseCores + 96 GB HBM**。
+- 中间有两个独立 compute/logic chiplet。Google 官方明确写：**每个 chiplet = 1 TensorCore + 2 SparseCores + 96 GB HBM**（单位按 chiplet 段原文保留）。
 - 两个 chiplet 有独立 memory space，通过高速 D2D 互连；官方称 D2D 带宽约为一个 1D ICI link 的 6 倍。
 - 右侧还有独立的 SerDes chiplet，承担 ICI / SerDes 相关功能。
 - 图中模块位置只是为了教学，不代表真实物理版图。
@@ -141,6 +148,7 @@ Google 官方 TPU7x 文档有一张非常好的 `Ironwood architecture diagram`�
 
 - [TPU7x (Ironwood) official documentation](https://docs.cloud.google.com/tpu/docs/tpu7x)
 - 官方图名：`Ironwood architecture diagram`
+- 本地镜像记录：`assets/REMOTE_IMAGES.md`
 
 ### 2.1 一颗 TPU7x chip 不是一个 monolithic compute die
 
@@ -179,6 +187,8 @@ $$
 +
 96\ \text{GB HBM}
 $$
+
+> **单位口径提醒：**同一 TPU7x 页面在 chiplet 描述中写 `96 GB`，在 chip 规格表中写 `192 GiB`。本文保留来源原单位；页面没有说明两处是否采用同一换算口径，因此不把 `96 GB × 2` 当作严格的 `192 GiB` 换算。
 
 这说明 Ironwood 的 chiplet 化不是“封装层面的透明实现细节”，因为它会直接暴露到 programming model。
 
@@ -301,7 +311,7 @@ other TPU chips
 
 这不是完整 topology，只是区分两层通信代价。
 
-Day 5 再把它扩成 ICI / cube / OCS / Pod。
+Day 7 再把它扩成 ICI / cube / OCS / Pod。
 
 ---
 
@@ -322,7 +332,7 @@ TPU7x 官方文档写得非常明确：
 
 > 一个 CPU host 软件环境，加上它管理的一组 TPU chips。
 
-TPU 并不是脱离 host CPU 独立工作的黑盒。runtime、数据准备、storage/network control path 仍然要经过 host 系统。
+TPU 并不是脱离 host CPU 独立工作的黑盒：runtime、控制面和相当一部分数据准备运行在 host 上；但 TPU 间的 accelerator data path 可以由 ICI/RDMA 等机制直接完成，不应笼统地说所有 tensor 都经过 host CPU。
 
 ### 4.2 Slice：用户真正申请到的 TPU topology
 
@@ -346,9 +356,9 @@ Google 还规定：
 
 - 大于 64 chips 的 slice，由一个或多个 `4×4×4` cube 组成；
 - TPU7x 使用 3D torus interconnect；
-- 一个 Pod 最多 9216 chips。
+- TPU7x 官方页以 **9,216-chip Pod** 描述最大规模；Google 的 Ironwood 博客把同一规模称为 **9,216-chip superpod**。本文沿各来源原称，不能据此推导出两种不同的硬件规模。
 
-### 4.3 Pod：一个大的 scale-up 域
+### 4.3 Pod / superpod：一个大的 scale-up 域
 
 把概念压缩成：
 
@@ -375,7 +385,7 @@ TPU 的 ICI / Pod 主要属于前者。
 
 ---
 
-## 5. TPU 8：为什么 Google 开始把 training 与 inference 分成两套硬件
+## 5. TPU 8：为什么 Google 开始把 training 与 serving/post-training 分成两套硬件
 
 这一节先只看“资源预算怎么变”，不深入内部执行。
 
@@ -404,9 +414,9 @@ Google 官方定位：
 - 9600 chips / superpod；
 - 3D torus；
 - SparseCore；
-- 216 GB HBM；
-- 6.528 TB/s HBM；
-- 12.6 PFLOPS FP4。
+- 216 GB HBM / chip；
+- 6.528 TB/s HBM bandwidth / chip；
+- 12.6 PFLOPS FP4 / chip。
 
 核心目标是：
 
@@ -414,18 +424,22 @@ Google 官方定位：
 
 ### 5.2 TPU 8i
 
+Google [官方产品页](https://cloud.google.com/tpu) 称 TPU 8i 面向 **post-training 与 inference**；[technical deep dive](https://cloud.google.com/blog/products/compute/tpu-8t-and-tpu-8i-technical-deep-dive) 的规格表进一步把主要 workload 写成 sampling、serving、reasoning。因此本文用“serving/post-training”作总称，不把 8i 简化成只做在线 inference。
+
 Google 官方定位：
 
 - sampling；
 - serving；
 - reasoning；
-- reinforcement learning；
-- 288 GB HBM；
-- 8.601 TB/s HBM；
-- 384 MB on-chip SRAM；
-- 10.1 PFLOPS FP4；
+- reinforcement learning（产品资料并列的应用方向；技术博客规格表的主工作负载栏写 sampling、serving、reasoning）；
+- 288 GB HBM / chip；
+- 8.601 TB/s HBM bandwidth / chip；
+- 384 MB on-chip SRAM / chip；
+- 10.1 PFLOPS FP4 / chip；
 - CAE；
 - Boardfly。
+
+本节的 TPU 8 数字逐项保留 Google technical deep dive 规格表的原单位，作用域为 **per chip**（`9600 chips / superpod` 另属系统规模）。JAX 的 [TPU Hardware Reference](https://docs.jax.dev/en/latest/pallas/tpu/hardware.html) 当前按 **per TensorCore**、且是另一版 API 表列出 8T/8I 的容量和带宽；这些数字不能跨来源直接相加或当作严格矛盾。
 
 注意：
 
@@ -437,7 +451,7 @@ $$
 
 但 8i 并不是“低端版 8t”。
 
-它拿面积/功耗预算换了：
+从公开规格可以推断，8i 的设计重点把更多预算/优化空间放在：
 
 - 更大 SRAM；
 - 更高 HBM 带宽；
@@ -479,7 +493,7 @@ TPU 8t 的设计明显更贴近这个目标。
 - reward / verifier；
 - policy update / training。
 
-Google 把 TPU 8i 明确定位到 RL，说明它认为 rollout / reasoning 这类高比例 sampling workload 的硬件瓶颈和传统 pre-training 已经明显不同。
+Google 的产品资料把 TPU 8i 与 reinforcement learning 并列，并在技术博客中重点描述 sampling、serving、reasoning；这说明 rollout / reasoning 这类高比例 sampling workload 的硬件瓶颈和传统 pre-training 已经明显不同，但不要把博客的主工作负载栏误读成只支持 RL。
 
 ### 6.3 Online decode
 
@@ -488,7 +502,7 @@ decode 的特点：
 - `M` 小；
 - token-by-token 串行；
 - weight / KV cache 访存占比高；
-- TP collective latency直接进入每 token critical path；
+- TP collective latency 直接进入每 token critical path；
 - MoE routing 造成 all-to-all 特征。
 
 所以 8i 更大 HBM、更高 HBM bandwidth、更大 SRAM、CAE 和 Boardfly 才会有价值。
@@ -519,7 +533,7 @@ Ironwood 不等于。
 
 ### 7.3 Ironwood 是“推理 TPU”，所以不能训练？
 
-不对。Google 官方 TPU7x 文档明确支持 large-scale dense / MoE、pre-training、sampling 和 decode-heavy inference。它只是优化重点明显向 inference 时代移动。
+不对。Google 官方 TPU7x 文档明确支持 large-scale dense / MoE、pre-training、sampling 和 decode-heavy inference；不能把 Ironwood 简化成 inference-only。真正明确的 training/serving 硬件分化出现在 TPU 8t 与 8i 的产品定位中。
 
 ### 7.4 Pod size 就是整套集群上限？
 
@@ -599,7 +613,7 @@ Ironwood 是非常适合当学习入口的一代，因为它同时暴露了：
 2. 能对着 Ironwood package 图说出两个 compute chiplet、TensorCore、SparseCore、HBM、SerDes/ICI 各自的位置和职责层级。
 3. 能解释为什么 8i 的 FP4 峰值低于 8t，却不能据此说 8i 更弱。
 
-**下一课：Google TPU Day 2 —— TensorCore 内部：MXU、VPU、XLU、TCS、SparseCore，以及 TPU 执行模型和 GPU SM 的根本差异。**
+**下一课：Google TPU Day 2 —— TensorCore 内部：MXU、VPU、Scalar Unit，以及 TPU 执行模型和 GPU SM 的功能级差异。XLU、TCS、SparseCore 的更细实现不在 Day 2 主线内。**
 
 ---
 

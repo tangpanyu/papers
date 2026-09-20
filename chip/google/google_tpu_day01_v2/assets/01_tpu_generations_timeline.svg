@@ -53,7 +53,7 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <text x="20" y="38" class="h">TPU7x · Ironwood</text>
 <text x="20" y="72" class="t">7th generation · GA</text>
 <text x="20" y="102" class="t">Dual-chiplet</text>
-<text x="20" y="132" class="t">9216 chips / Pod</text>
+<text x="20" y="132" class="t">9,216 chips / Pod*</text>
 <text x="20" y="162" class="small">2026-03-31 GA</text>
 </g>
 <circle cx="1340" cy="330" r="10" fill="#5f6368"/>
@@ -76,4 +76,5 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <line x1="1340" y1="330" x2="1420" y2="385" stroke="#7c8a9b" stroke-width="2"/>
 
 <text x="80" y="650" class="small">审核口径：产品状态以 Google Cloud TPU 产品页 / release notes 为准；结构性结论只保留官方公开内容。</text>
+<text x="80" y="680" class="small">* TPU7x 官方页称 9,216-chip Pod；Ironwood 博客称同一规模为 superpod，本文沿来源原称。</text>
 </svg>

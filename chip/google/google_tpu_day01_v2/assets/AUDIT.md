@@ -2,19 +2,21 @@
 
 本学习包的四张 SVG 均为教学重绘，不宣称是 Google 原始图。审核按三轮进行。
 
+官方原图 `05_ironwood_architecture_official.png` 单独保存并在 `REMOTE_IMAGES.md` 登记；SVG 与官方图的角色明确区分，避免把重绘图误读为 die floorplan。
+
 ## A. 事实审核
 
 - `03_ironwood_package_reconstructed.svg`
-  - 对照 TPU7x 官方文档：每 chip 含 2 TensorCores、4 SparseCores、192 GB HBM。
-  - 对照 dual-chiplet 文本：每 chiplet = 1 TensorCore + 2 SparseCores + 96 GB HBM；两个 chiplet 独立 memory space。
-  - 对照官方架构图：保留 Host、gBMC、PCIe Gen5 x16 / Gen2 x1、TensorCore 内的 TCS/XLU/MXU/VPU+VMEM、Memory & DMA Interconnect、SparseCore、HBM controllers/stacks、SerDes chiplet、ICI/ICR Router、link stack、SerDes。
+  - 对照 TPU7x 官方文档：每 chip 含 2 TensorCores、4 SparseCores、192 GiB HBM（规格表原单位）。
+  - 对照 dual-chiplet 文本：每 chiplet = 1 TensorCore + 2 SparseCores + 96 GB HBM（chiplet 描述原单位）；两个 chiplet 独立 memory space。两处单位按来源保留，不做未经说明的 GB↔GiB 精确换算。
+  - 对照官方架构图：保留 Host、gBMC、PCIe Gen5 x16 / Gen2 x1、TensorCore 内的 TCS/XLU/MXU/VPU+VMEM、Memory & DMA Interconnect、SparseCore、图中原始命名的 HBM3 controllers 与 HBM3E stacks、SerDes chiplet、ICI/ICR Router、link stack、SerDes。
   - 对照官方文字：D2D 约为单个 1D ICI link 的 6×。
   - 未绘制官方未披露的真实位宽、时钟、floorplan、内部 arbitration。
 
 - `02_ironwood_resource_hierarchy.svg`
   - 1 compute chiplet 对应框架中的 1 device；1 TPU7x chip 包含 2 chiplets，因此框架可见 2 devices/chip。
   - 1 TPU7x VM = 4 chips、224 vCPU、960 GB RAM、2 NUMA nodes。
-  - Pod = 9216 chips；示例 slice topology 与官方表一致。
+  - TPU7x 官方页以 9,216-chip Pod 描述最大规模；Ironwood 博客把同一规模称为 superpod，正文和图注显式说明两种命名来自不同来源；示例 slice topology 与官方表一致。
 
 - `04_tpu8_training_vs_inference.svg`
   - TPU 8t：216 GB HBM、6528 GB/s、12.6 PFLOPS FP4、3D torus、9600-chip superpod、SparseCore。
@@ -38,6 +40,6 @@
 ## 审核后的修改记录
 
 - 第一次渲染后发现 `03_ironwood_package_reconstructed.svg` 中 Chip Manager 没有明确接入管理/内存路径，容易造成“孤立模块”的误读；第二版补上了 PCIe/Chip Manager 到 chiplet A `Memory & DMA Interconnect` 的示意连接。
-- 第二次渲染后发现 D2D 标签压在 chiplet 边界与 interconnect 附近；第三版把标签上移，避免把文字误读成总线本身。
+- 第二次渲染后发现 D2D 标签压在 chiplet 边界与 MXU 附近；第三版把标签移到 TensorCore 与 Memory/DMA Interconnect 之间的留白并居中，避免覆盖模块文字或被误读成总线本身。
 - `04_tpu8_training_vs_inference.svg` 初版的 `embedding / irregular gather` 与 `reduction / synchronization` 标签过长；第二版拆成两行，避免越界。
 - `01_tpu_generations_timeline.svg` 与 `02_ironwood_resource_hierarchy.svg` 首轮渲染未发现遮挡、层级歧义或越界，保留。

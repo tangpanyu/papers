@@ -1,6 +1,7 @@
 # Google TPU Day 2：TensorCore 执行模型——MXU、VPU、Scalar Unit 到底怎么协作
 
 - 日期：2026-08-27
+- 资料复核：2026-09-08（动态产品、规格与 API 状态以该日页面为准）
 - 预计学习时间：约 30 分钟
 - 承接 Day 1：昨天把 `chiplet → chip → device → VM → slice → Pod` 放对层级；今天只往一个 compute chiplet 里面钻一层。
 - 今日边界：只讲 TensorCore 的执行模型和 MXU/VPU/Scalar Unit 分工。VMEM/HBM 的完整层级、DMA pipeline、SparseCore 都留到后续 Day。
@@ -15,7 +16,7 @@
 
 ## 1. 先看最有用的一张 TensorCore 图
 
-![JAX Scaling Book：TPU TensorCore 抽象图](https://jax-ml.github.io/scaling-book/assets/img/tpu.png)
+![JAX Scaling Book：TPU TensorCore 抽象图](assets/01_tpu_chip_jax_scaling_book.png)
 
 来源：[JAX Scaling Book — How to Think About TPUs](https://jax-ml.github.io/scaling-book/tpus/)
 
@@ -64,7 +65,7 @@ Google 当前 Cloud TPU 架构文档给出：TPU v6e 和 TPU7x 的 MXU 使用 `2
 
 ### 3.1 systolic array 先只理解一个工程点
 
-![Google 官方：第一代 TPU systolic array](https://storage.googleapis.com/gweb-cloudblog-publish/images/tpu-17u39j.max-500x500.PNG)
+![Google 官方：第一代 TPU systolic array](assets/02_tpu_systolic_array_google.png)
 
 来源：[Google Cloud — An in-depth look at Google’s first TPU](https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu)
 
@@ -148,7 +149,7 @@ SMEM → SREG → Scalar Unit
 
 其中 `VMEM` 是 vector SRAM，`SMEM` 是 scalar SRAM，`VREG` / `SREG` 是对应寄存器。
 
-JAX Hardware Reference 当前按**每 TensorCore**列出 Ironwood 约 `64 MiB VMEM`、`1 MiB SMEM`。一颗 Ironwood chip 有两个 TensorCore，因此不能把 per-TensorCore 数字直接当 per-chip。
+JAX [TPU Hardware Reference](https://docs.jax.dev/en/latest/pallas/tpu/hardware.html) 当前按**每 TensorCore**列出 Ironwood 约 `64 MiB VMEM`、`1 MiB SMEM`。一颗 Ironwood chip 有两个 TensorCore，因此不能把 per-TensorCore 数字直接当 per-chip。
 
 ## 7. NVIDIA 对照：差别主要在“机器模型怎么暴露”
 

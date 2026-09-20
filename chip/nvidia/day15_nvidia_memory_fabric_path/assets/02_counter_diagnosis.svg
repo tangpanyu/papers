@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+<defs><marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker><style>
+text{font-family:Arial,"Noto Sans SC",sans-serif;fill:#172033}.title{font-size:30px;font-weight:700}.sub{font-size:16px;fill:#526579}.h{font-size:21px;font-weight:700}.b{font-size:17px}.s{font-size:15px;fill:#526579}.box{stroke-width:2.5;rx:15}.arrow{stroke:#334155;stroke-width:3.5;fill:none;marker-end:url(#arrow)}
+</style></defs>
+<rect width="1400" height="820" fill="#f7fafc"/>
+<text x="700" y="48" text-anchor="middle" class="title">带宽没打满时：沿数据路径寻找最早异常</text>
+<text x="700" y="78" text-anchor="middle" class="sub">教学重绘 / schematic / not to scale；metric 名称随 GPU 与 Nsight Compute 版本变化</text>
+
+<rect x="55" y="135" width="285" height="110" class="box" fill="#edf5ff" stroke="#4f8ac9"/><text x="197" y="177" text-anchor="middle" class="h">① 请求形状</text><text x="197" y="209" text-anchor="middle" class="b">sectors / request · actual bytes</text>
+<rect x="385" y="135" width="285" height="110" class="box" fill="#f0edff" stroke="#7964c5"/><text x="527" y="177" text-anchor="middle" class="h">② L1 / XBAR</text><text x="527" y="209" text-anchor="middle" class="b">return path · stalls</text>
+<rect x="715" y="135" width="285" height="110" class="box" fill="#eaf7f2" stroke="#3d8f8a"/><text x="857" y="177" text-anchor="middle" class="h">③ L2 / fabric</text><text x="857" y="209" text-anchor="middle" class="b">hit · throughput · miss</text>
+<rect x="1045" y="135" width="300" height="110" class="box" fill="#fff1e8" stroke="#c35a38"/><text x="1195" y="177" text-anchor="middle" class="h">④ DRAM</text><text x="1195" y="209" text-anchor="middle" class="b">bytes · % peak</text>
+<path d="M340 190 L385 190" class="arrow"/><path d="M670 190 L715 190" class="arrow"/><path d="M1000 190 L1045 190" class="arrow"/>
+
+<text x="70" y="305" class="h">读数 → 判断 → 下一步</text>
+<rect x="55" y="340" width="400" height="300" class="box" fill="#f2f7ff" stroke="#4f8ac9"/>
+<text x="255" y="382" text-anchor="middle" class="h">A. sectors/request 偏高</text><text x="85" y="425" class="b">现象：actual bytes ≫ requested bytes</text><text x="85" y="465" class="b">优先查：stride、alignment、gather、mask</text><text x="85" y="505" class="b">动作：布局、批处理、向量化、重排</text><text x="85" y="565" class="s">修好入口后，仍可能落入 B 或 C。</text>
+<rect x="500" y="340" width="400" height="300" class="box" fill="#effaf7" stroke="#3d8f8a"/>
+<text x="700" y="382" text-anchor="middle" class="h">B. HBM 低、long scoreboard 高</text><text x="530" y="425" class="b">现象：请求形状尚可，但依赖链长</text><text x="530" y="465" class="b">优先查：ILP、并发请求、pointer chase</text><text x="530" y="505" class="b">动作：预取、多 stage、批量化、减依赖</text><text x="530" y="565" class="s">这是 latency / concurrency 问题，未必是带宽上限。</text>
+<rect x="945" y="340" width="400" height="300" class="box" fill="#fff8e9" stroke="#d98b27"/>
+<text x="1145" y="382" text-anchor="middle" class="h">C. 局部端口高、总 HBM 低</text><text x="975" y="425" class="b">现象：某条 XBAR/L2 path 先接近峰值</text><text x="975" y="465" class="b">优先查：地址热点、读写混合、原子</text><text x="975" y="505" class="b">动作：改 leading dimension / placement</text><text x="975" y="545" class="b">用多尺寸、多 offset 做 A/B microbench</text><text x="975" y="590" class="s">不要把实验推断的 hash 写成 ABI 事实。</text>
+<path d="M255 640 C255 690 1145 690 1145 640" class="arrow"/>
+<rect x="180" y="710" width="1040" height="62" class="box" fill="#eef2f5" stroke="#8092a2"/>
+<text x="700" y="748" text-anchor="middle" class="b">先处理路径上最早出现的异常，再决定改 kernel、布局、并发度还是 cache policy。</text>
+</svg>

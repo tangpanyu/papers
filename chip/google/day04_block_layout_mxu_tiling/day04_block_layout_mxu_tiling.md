@@ -1,9 +1,10 @@
 # Google TPU Day 4：Block、Layout 与 MXU Tiling——“一个 Tile”其实有三层含义
 
 - 日期：2026-08-31
+- 资料复核：2026-09-08（动态产品、规格与 API 状态以该日页面为准）
 - 预计学习时间：约 30 分钟
 - 承接：Day 3 已建立 `HBM → VMEM → VREG → MXU/VPU` 与 double buffering；今天只回答搬进 VMEM 的 block 怎样变成 MXU 真正执行的矩阵块。
-- 资料状态：以截至 2026-08-31 的 JAX/Pallas 与 Google Cloud 公开资料为准。Pallas 仍是实验性接口；软件 API 与硬件事实分开看。
+- 资料状态：以截至 2026-09-08 复核的 JAX/Pallas 与 Google Cloud 公开资料为准（原成稿日期：2026-08-31）。Pallas 仍是实验性接口；软件 API 与硬件事实分开看。
 
 ## 今日目标
 
@@ -14,6 +15,12 @@
 写 CUDA/CuTe 时，我们会区分 CTA tile、SMEM/register layout 和 MMA atom。TPU 同样存在多层映射，只是 Pallas/Mosaic 暴露方式不同。
 
 ![Block、layout 与 MXU tiling](assets/01_block_layout_mxu.svg)
+
+为了把中间这一层落到具体约束，再看 JAX 官方的 vector-register tiling 例图：它以 `12×320` 数组和多个 `8×128` tile footprint 展示 layout 规则。图中 tile 之间包含 padding/重叠，不能把它理解成简单的六等分或做 `6×(8×128)=12×320` 的面积等式；它也不是 Ironwood 的 bank/floorplan 图。
+
+![JAX 官方 vector layout 示例](assets/02_vector_layout_example_official.svg)
+
+来源：[Writing TPU kernels with Pallas — Array Layouts](https://docs.jax.dev/en/latest/pallas/tpu/details.html)，[原始 SVG @ JAX commit `02fed78`](https://github.com/jax-ml/jax/blob/02fed78da8636337dcc051079c03947cd9949908/docs/_static/pallas/vector_layout_example.svg)。本地镜像与许可记录见 `assets/REMOTE_IMAGES.md`。
 
 **怎么看：**
 
@@ -40,7 +47,7 @@ BlockSpec shape
 
 上一课把 VMEM 定位为显式 working-set SRAM。今天再加一句：程序看到的二维数组 shape，不等于硬件里已经天然存在一个二维 row-major SRAM。
 
-截至 2026-08-31，JAX Pallas changelog 显示 TPU `CompilerParams.needs_layout_passes` 已默认开启，官方同时注明 layout passes 仍在开发。这说明现代 Mosaic TPU 正在让 compiler 更主动地完成 layout assignment/lowering。
+截至 2026-09-08（本次复核），JAX Pallas changelog 显示 TPU `CompilerParams.needs_layout_passes` 已默认开启，官方同时注明 layout passes 仍在开发。这说明现代 Mosaic TPU 正在让 compiler 更主动地完成 layout assignment/lowering。
 
 这里不要越过公开资料：Ironwood TensorCore VMEM 的完整 bank mapping、bank 数和类似 CuTe `Shape/Stride` 的物理映射并未完整公开。因此我们确认“存在 physical layout/lowering 问题”，但不猜具体 bank 结构。
 
@@ -143,3 +150,4 @@ MXU utilization / reuse 下降
 5. [JAX Pallas — TPU CompilerParams](https://docs.jax.dev/en/latest/_autosummary/jax.experimental.pallas.tpu.CompilerParams.html)
 6. [Google Cloud — Cloud TPU documentation](https://docs.cloud.google.com/tpu/docs)
 7. [Google Cloud — TPU7x performance optimizations](https://docs.cloud.google.com/tpu/docs/ironwood-performance)
+8. [JAX Pallas — Writing TPU kernels: Array Layouts](https://docs.jax.dev/en/latest/pallas/tpu/details.html)

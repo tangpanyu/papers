@@ -47,17 +47,18 @@
 
   <rect x="1180" y="130" width="565" height="475" rx="20" fill="#f2edff" stroke="#9e88df" stroke-width="2" filter="url(#shadow)"/>
   <text x="1210" y="170" class="section">indexer sidecar · physical page 41</text>
-  <text x="1210" y="203" class="mono">tensor: [Npages, 64 × 132] uint8</text>
-  <text x="1210" y="232" class="body">logical token = FP8 key[128] + FP32 scale[1]</text>
-  <text x="1210" y="261" class="body">per page / layer = 64 × 132 B = 8.25 KiB</text>
-  <rect x="1225" y="295" width="470" height="50" rx="8" fill="#ded5ff" stroke="#9e88df"/>
-  <text x="1245" y="326" class="mono">offset 0 · index_k[128 B] | scale[4 B]</text>
-  <rect x="1225" y="353" width="470" height="50" rx="8" fill="#ebe5ff" stroke="#9e88df"/>
-  <text x="1245" y="384" class="mono">offset 1 · index_k[128 B] | scale[4 B]</text>
-  <rect x="1225" y="411" width="470" height="50" rx="8" fill="#f4f5f7" stroke="#c5cad3"/>
-  <text x="1245" y="442" class="mono">offset 2 … 62 · unwritten / stale</text>
-  <rect x="1225" y="469" width="470" height="50" rx="8" fill="#f4f5f7" stroke="#c5cad3"/>
-  <text x="1245" y="500" class="mono">offset 63 · unwritten / stale</text>
+  <text x="1210" y="203" class="mono">tensor: [Npages, 64×128 + 64×4] uint8</text>
+  <text x="1210" y="232" class="body">physical page = K[64×128] | scale[64×4] (SoA)</text>
+  <text x="1210" y="261" class="body">logical token i pairs K[i,:] with scale[i,:]</text>
+  <rect x="1225" y="295" width="470" height="72" rx="8" fill="#ded5ff" stroke="#9e88df"/>
+  <text x="1245" y="325" class="mono">K region · offsets 0..63 · 8,192 B</text>
+  <text x="1245" y="351" class="small">index_k[64,128] uint8 · byte offset 0</text>
+  <rect x="1225" y="381" width="470" height="72" rx="8" fill="#ebe5ff" stroke="#9e88df"/>
+  <text x="1245" y="411" class="mono">scale region · offsets 0..63 · 256 B</text>
+  <text x="1245" y="437" class="small">scale bytes[64,4] · FP32 payload · starts at 64×128 B</text>
+  <rect x="1225" y="467" width="470" height="58" rx="8" fill="#f4f5f7" stroke="#c5cad3"/>
+  <text x="1245" y="493" class="mono">offset i: K[i] ↔ scale[i]</text>
+  <text x="1245" y="514" class="small">same offset pairs the views; not an interleaved AoS record</text>
   <text x="1225" y="556" class="small">same out_cache_loc=2624+i means page 41 / offset i;</text>
   <text x="1225" y="582" class="small">RadixCache needs no second indexer mapping.</text>
 

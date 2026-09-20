@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+<rect width="100%" height="100%" fill="white"/>
+<text x="640" y="38" text-anchor="middle" font-family="sans-serif" font-size="27">TPU 8t vs TPU 8i: specialization is a system-level choice</text>
+<text x="640" y="64" text-anchor="middle" font-family="sans-serif" font-size="13">schematic / not to scale / 根据 Google Cloud 官方资料重绘</text>
+<g font-family="sans-serif">
+<rect x="55" y="115" width="530" height="500" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="320" y="155" text-anchor="middle" font-size="23">TPU 8t — training</text>
+<text x="320" y="195" text-anchor="middle" font-size="16">maximize sustained throughput / goodput</text>
+<rect x="105" y="235" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="320" y="272" text-anchor="middle">12.6 PFLOP/s FP4 peak</text>
+<rect x="105" y="320" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="320" y="357" text-anchor="middle">216 GB HBM / 6,528 GB/s</text>
+<rect x="105" y="405" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="320" y="442" text-anchor="middle">128 MB VMEM + SparseCore</text>
+<rect x="105" y="490" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="320" y="527" text-anchor="middle">3D torus / 9,600-chip superpod</text>
+<rect x="695" y="115" width="530" height="500" fill="#f5f5f5" stroke="#333" stroke-width="2"/>
+<text x="960" y="155" text-anchor="middle" font-size="23">TPU 8i — inference / reasoning</text>
+<text x="960" y="195" text-anchor="middle" font-size="16">minimize memory + collective + tail latency</text>
+<rect x="745" y="235" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="960" y="272" text-anchor="middle">10.1 PFLOP/s FP4 peak</text>
+<rect x="745" y="320" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="960" y="357" text-anchor="middle">288 GB HBM / 8,601 GB/s</text>
+<rect x="745" y="405" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="960" y="442" text-anchor="middle">384 MB VMEM + CAE</text>
+<rect x="745" y="490" width="430" height="60" fill="#e8e8e8" stroke="#333"/><text x="960" y="527" text-anchor="middle">Boardfly / up to 1,152 chips</text>
+<text x="640" y="668" text-anchor="middle" font-size="16">8t spends system budget on throughput and scale; 8i spends more on locality and low-latency communication.</text>
+</g></svg>

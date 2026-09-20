@@ -29,7 +29,7 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <text x="186" y="105" class="t">chiplet B</text>
 <text x="50" y="134" class="small">device 0</text>
 <text x="190" y="134" class="small">device 1</text>
-<text x="25" y="185" class="t">192 GB HBM total</text>
+<text x="25" y="185" class="t">192 GiB HBM total*</text>
 </g>
 <text x="470" y="390" class="small">2 个 compute chiplet；D2D 比 1D ICI link 快约 6×</text>
 
@@ -61,8 +61,9 @@ text{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;fill:#202124}
 <g transform="translate(1150,500)">
 <rect width="450" height="150" class="pod"/>
 <text x="22" y="40" class="h">TPU Pod / scale-up domain</text>
-<text x="22" y="80" class="t">Ironwood：最多 9216 chips</text>
+<text x="22" y="80" class="t">Ironwood：9,216 chips*</text>
 <text x="22" y="112" class="t">3D torus ICI；大 slice 由 4×4×4 cubes 组成</text>
 </g>
 <text x="65" y="720" class="small">关键：一颗物理 TPU7x chip 在框架层面暴露为两个 device；不要把 chip 数量和 device 数量混为一谈。</text>
+<text x="65" y="748" class="small">* TPU7x 官方页称该规模为 Pod；Ironwood 博客称同一规模为 superpod。chiplet 描述的 96 GB 与规格表的 192 GiB 也按来源保留。</text>
 </svg>
